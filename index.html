@@ -113,6 +113,7 @@ textarea{height:160px;font-size:14px}
     <div class="bar"><i id="qBar" style="width:0"></i></div>
     <div class="mean" id="qMean" style="margin-top:16px"></div>
     <div class="word" id="qShow" style="letter-spacing:4px;color:#4f46e5"></div>
+    <button class="sub" onclick="speak(cur.w)" style="margin-top:0">🔊 발음 듣기</button>
     
     <!-- 손글씨 입력 -->
     <div id="qPadBox">
@@ -134,7 +135,7 @@ const STAGE=["","보고 따라 쓰기","철자 채우기","첫글자 힌트","�
 let words=JSON.parse(localStorage.getItem('words')||'[]'), cur, sI=0, queue=[], qI=0, onlyWrong=false;
 const save=()=>localStorage.setItem('words',JSON.stringify(words));
 const go=id=>{['home','book','study','quiz'].forEach(x=>document.getElementById(x).classList.toggle('hide',x!==id));if(id==='home')renderStat();};
-const speak=t=>{const u=new SpeechSynthesisUtterance(t);u.lang='en-US';speechSynthesis.speak(u);};
+const speak=t=>{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=0.9;speechSynthesis.speak(u);};  // 버튼을 눌렀을 때만 호출
 const shuffle=a=>a.sort(()=>Math.random()-.5);
 
 /* OCR */
@@ -277,7 +278,7 @@ function makeHint(w){
 function startStudy(){if(!words.length)return alert('단어장을 먼저 등록하세요');sI=0;go('study');showStudy();}
 function showStudy(){cur=words[sI];document.getElementById('sIdx').textContent=(sI+1)+' / '+words.length;
   document.getElementById('sWord').textContent=cur.w;document.getElementById('sMean').textContent=cur.m;
-  document.getElementById('sHint').innerHTML=makeHint(cur.w);speak(cur.w);}
+  document.getElementById('sHint').innerHTML=makeHint(cur.w);}
 function sMove(d){sI=(sI+d+words.length)%words.length;showStudy();}
 
 /* 검증 모드 */
@@ -296,7 +297,7 @@ function ask(){
   document.getElementById('qMean').textContent=cur.m;document.getElementById('qFb').textContent='';
   const show=document.getElementById('qShow'),ib=document.getElementById('qInputBox'),inp=document.getElementById('qIn');
   show.textContent='';inp.value='';
-  if(st===1){show.textContent=cur.w;speak(cur.w);}           // 단어를 보여주고 그대로 입력
+  if(st===1){show.textContent=cur.w;}           // 단어를 보여주고 그대로 입력
   if(st===2){const a=cur.w.split('');for(let i=1;i<a.length-1;i++)if(Math.random()<.5)a[i]='_';show.textContent=a.join('');}
   if(st===3)show.textContent=cur.w[0]+'_'.repeat(cur.w.length-1);
   setInputMode(inputMode);                                    // 손글씨/자판 중 마지막에 쓰던 방식으로
@@ -357,8 +358,8 @@ function padOverride(){pendingWrong=false;document.getElementById('padOkBtn').cl
 function padConfirmWrong(){if(pendingWrong){pendingWrong=false;judge(false);}}
 function judge(ok){
   const fb=document.getElementById('qFb');
-  if(ok){cur.lv++;fb.innerHTML='<span style="color:#16a34a">⭕ 정답!</span>';speak(cur.w);}
-  else{cur.wrong++;cur.lv=Math.max(0,cur.lv-1);fb.innerHTML=`<span style="color:#dc2626">❌ 정답: <b>${cur.w}</b></span>`;speak(cur.w);}
+  if(ok){cur.lv++;fb.innerHTML='<span style="color:#16a34a">⭕ 정답!</span>';}
+  else{cur.wrong++;cur.lv=Math.max(0,cur.lv-1);fb.innerHTML=`<span style="color:#dc2626">❌ 정답: <b>${cur.w}</b></span>`;}
   save();qI++;setTimeout(ask,ok?700:1800);
 }
 
