@@ -2,7 +2,7 @@
    - 앱 파일(index.html, manifest, 아이콘)은 설치 때 미리 저장
    - tesseract(OCR) 같은 외부 파일은 한 번 받으면 저장해 두고 다음부턴 저장본 사용
    수정할 때마다 아래 VERSION 숫자를 올리면 폰에 새 버전이 적용됩니다. */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const APP_CACHE = 'vocab-app-' + VERSION;
 const RUNTIME_CACHE = 'vocab-runtime';
 const APP_FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
