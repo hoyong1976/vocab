@@ -83,11 +83,8 @@ textarea{height:160px;font-size:14px}
 
   <!-- 붙여넣기 / 사진 -->
   <div class="card">
-    <h2>📋 여러 단어 한꺼번에 넣기 <span class="hint" id="pvTarget"></span></h2>
-    <p class="hint">아래 칸에 직접 쓰거나(형식: <b>영어단어 한글뜻</b>, 한 줄에 하나) 사진을 읽히면 단어 목록이 떠요.</p>
-    <textarea id="raw" placeholder="apple 사과&#10;beautiful 아름다운&#10;..." oninput="previewDirty()"></textarea>
-    <button class="sub" onclick="preview()">🔍 글 칸의 단어 확인하기</button>
-    <h2 style="margin-top:16px">📷 사진으로 읽기</h2>
+    <textarea id="raw" class="hide" oninput="previewDirty()"></textarea>
+    <h2>📷 사진으로 읽기 <span class="hint" id="pvTarget"></span></h2>
     <p class="hint">갤러리에서 사진 고르기(여러 장 가능) 또는 카메라로 바로 찍기. 한 쪽씩, 정면에서, 밝게 찍을수록 잘 읽어요. 두 쪽이 한 장에 있으면 자동으로 나눠 읽습니다.</p>
     <!-- 웹 버전: 파일 선택창 / 안드로이드 앱: 아래 androidBox 가 대신 보임 -->
     <div id="webPhotoBox">
@@ -116,7 +113,6 @@ textarea{height:160px;font-size:14px}
     <button class="sub" onclick="openBook()">📘 단어장 보기 / 고치기</button>
     <button onclick="startStudy()">📖 학습하기 (외우기)</button>
     <button onclick="startQuiz()">✍️ 단계별 검증</button>
-    <button onclick="startQuiz(true)" class="sub">❌ 오답만 다시</button>
     <button class="sub" onclick="resetProgress()">🔄 선택한 회차의 학습 진도 초기화 (단어는 유지)</button>
   </div>
 </div>
@@ -169,13 +165,20 @@ const STAGE=["","4지선다","철자 채우기","첫글자 힌트","뜻만 보�
 /* 회차(단어장) 여러 개: sets = [{id, name, words:[{w,m,lv,wrong}]}] */
 let sets=JSON.parse(localStorage.getItem('sets')||'null');
 if(!sets){const old=JSON.parse(localStorage.getItem('words')||'[]');sets=[{id:1,name:'1회차',words:old}];localStorage.removeItem('words');}
-let activeId=+localStorage.getItem('activeId')||sets[0].id;            // 새 단어가 들어가는 회차
-let selIds=JSON.parse(localStorage.getItem('selIds')||'null')||[sets[0].id]; // 학습·검증에 쓸 회차들
+let activeId=+localStorage.getItem('activeId')||(sets[0]?sets[0].id:0);            // 새 단어가 들어가는 회차
+let selIds=JSON.parse(localStorage.getItem('selIds')||'null')||(sets[0]?[sets[0].id]:[]); // 학습·검증에 쓸 회차들
 let words=[], cur, sI=0, queue=[], qI=0, onlyWrong=false;
-const activeSet=()=>sets.find(s=>s.id===activeId)||sets[0];
+const activeSet=()=>sets.find(s=>s.id===activeId)||sets[0];                 // 회차가 하나도 없으면 undefined
 const selSets=()=>sets.filter(s=>selIds.includes(s.id));
 function syncWords(){words=[];selSets().forEach(s=>words.push(...s.words));}
-const save=()=>{localStorage.setItem('sets',JSON.stringify(sets));localStorage.setItem('activeId',activeId);localStorage.setItem('selIds',JSON.stringify(selIds));syncWords();};
+/* "N회차" 꼴 이름은 순서대로 번호를 다시 매김 (1회차를 지우면 2회차→1회차) */
+function renumber(){sets.forEach((st,i)=>{if(/^\d+회차$/.test(st.name))st.name=(i+1)+'회차';});}
+/* 단어를 넣으려는데 회차가 하나도 없으면 1회차를 자동으로 만들어 돌려줌 */
+function ensureSet(){
+  if(activeSet())return activeSet();
+  const st={id:1,name:'1회차',words:[]};sets=[st];activeId=1;selIds=[1];save();renderSets();return st;
+}
+const save=()=>{renumber();localStorage.setItem('sets',JSON.stringify(sets));localStorage.setItem('activeId',activeId);localStorage.setItem('selIds',JSON.stringify(selIds));syncWords();};
 syncWords();
 /* 회차 목록 화면 */
 function renderSets(){
@@ -189,7 +192,8 @@ function renderSets(){
       <button onclick="renameSet(${st.id})">✏️</button><button onclick="delSet(${st.id})">🗑</button>`;
     el.appendChild(d);
   });
-  const nm=activeSet().name;
+  if(!sets.length)el.innerHTML='<p class="hint">회차가 없어요. 단어를 넣거나 사진을 읽히면 <b>1회차</b>가 자동으로 만들어져요.</p>';
+  const nm=activeSet()?activeSet().name:'1회차(자동 생성)';
   document.getElementById('qiTarget').textContent='→ '+nm+'에 추가';document.getElementById('pvTarget').textContent='→ '+nm;
 }
 function toggleSel(id,on){selIds=on?[...new Set([...selIds,id])]:selIds.filter(x=>x!==id);save();renderStat();renderSets();}
@@ -203,16 +207,18 @@ function selRange(){
 function setActive(id){activeId=id;save();renderSets();}
 function newSet(){
   const inp=document.getElementById('newSetName');
-  const name=(inp.value||'').trim()||(sets.length+1)+'회차';
+  const name=(inp.value||'').trim()||(sets.length+1)+'회차';  // 저장 때 renumber 로 번호가 정리됨
   const id=Math.max(0,...sets.map(s=>s.id))+1;sets.push({id,name,words:[]});
   activeId=id;selIds=[id];inp.value='';save();renderStat();renderSets();
   document.getElementById('qiLog').textContent=`✅ '${name}' 를 만들었어요. 이제 새 단어는 여기에 들어가요.`;
 }
 function renameSet(id){const st=sets.find(s=>s.id===id);const v=prompt('회차 이름 고치기',st.name);if(v&&v.trim()){st.name=v.trim();save();renderSets();}}
 function delSet(id){
-  const st=sets.find(s=>s.id===id);if(sets.length===1)return alert('마지막 회차는 지울 수 없어요. 대신 단어를 비우세요.');
+  const st=sets.find(s=>s.id===id);
   if(!confirm(`'${st.name}' (단어 ${st.words.length}개)를 통째로 지울까요? 되돌릴 수 없어요.`))return;
-  sets=sets.filter(s=>s.id!==id);selIds=selIds.filter(x=>x!==id);if(activeId===id)activeId=sets[0].id;if(!selIds.length)selIds=[activeId];
+  sets=sets.filter(s=>s.id!==id);selIds=selIds.filter(x=>x!==id);
+  if(activeId===id)activeId=sets[0]?sets[0].id:0;
+  if(!selIds.length&&sets[0])selIds=[activeId];
   save();renderStat();renderSets();
 }
 const go=id=>{['home','book','study','quiz'].forEach(x=>document.getElementById(x).classList.toggle('hide',x!==id));if(id==='home'){renderStat();renderSets();}};
@@ -254,7 +260,7 @@ async function prepImages(file){
   URL.revokeObjectURL(img.src);return out;
 }
 async function ocrFiles(files){
-  if(!files.length)return;
+  if(!files.length)return;ensureSet();
   const st=document.getElementById('ocrStatus'),bar=document.getElementById('ocrBar'),raw=document.getElementById('raw');
   try{
     const w=await getWorker(st);
@@ -380,7 +386,7 @@ function quickAdd(){
   const wI=document.getElementById('qiW'),mI=document.getElementById('qiM');
   const w=wI.value.trim().toLowerCase(),m=mI.value.trim();
   if(!w||!m){ (w?mI:wI).focus();return; }
-  const tgt=activeSet().words;const dup=tgt.find(x=>x.w===w);
+  const tgt=ensureSet().words;const dup=tgt.find(x=>x.w===w);
   if(dup){if(!confirm(`'${w}'는 이미 있어요 (${dup.m}). 뜻을 바꿀까요?`))return;dup.m=m;}
   else tgt.push({w,m,lv:0,wrong:0});
   save();renderStat();renderSets();wI.value='';mI.value='';wI.focus();
@@ -402,7 +408,7 @@ document.getElementById('camera').onchange=e=>{ocrFiles([...e.target.files]);e.t
 /* 단어장 등록 — 인식 확인 표에 있는(고친) 내용을 그대로 등록 */
 function loadWords(append){
   if(pvDirtyFlag)preview();                       // 글을 고친 뒤 확인표를 안 눌렀으면 다시 읽기
-  const tgt=activeSet();const list=[],seen=new Set(append?tgt.words.map(x=>x.w):[]);
+  const tgt=ensureSet();const list=[],seen=new Set(append?tgt.words.map(x=>x.w):[]);
   for(const x of pvWords()){if(seen.has(x.w))continue;seen.add(x.w);list.push({w:x.w,m:x.m,lv:0,wrong:0});}
   if(!list.length){document.getElementById('ocrStatus').textContent=append?'새로 추가할 단어가 없어요 (체크했는지, 이미 있는 단어인지 확인).':'체크된 단어가 없어요.';return;}
   if(!append&&tgt.words.length&&!confirm(`'${tgt.name}'의 단어 ${tgt.words.length}개를 지우고 새로 넣을까요?`))return;
@@ -522,7 +528,7 @@ let installEvt=null;
 const ANDROID=!!window.AndroidBridge;              // MainActivity.kt 가 addJavascriptInterface 로 넣어준 객체가 있으면 앱
 if(ANDROID){document.getElementById('webPhotoBox').classList.add('hide');document.getElementById('androidBox').classList.remove('hide');}
 /* 안드로이드(ML Kit)가 사진 글자를 읽어 돌려줄 때 부르는 함수들 (3단계) */
-function onOcrStart(n){document.getElementById('ocrStatus').textContent=`사진 ${n}장 읽는 중... (앱 안의 구글 글자 인식)`;document.getElementById('androidPreview').textContent='';}
+function onOcrStart(n){ensureSet();document.getElementById('ocrStatus').textContent=`사진 ${n}장 읽는 중... (앱 안의 구글 글자 인식)`;document.getElementById('androidPreview').textContent='';}
 function onOcrText(text,i,n){
   const raw=document.getElementById('raw');
   if(text&&text.trim())raw.value=(raw.value.trim()?raw.value.trim()+'\n':'')+text.trim()+'\n';
