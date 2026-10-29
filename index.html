@@ -32,14 +32,13 @@ textarea{height:160px;font-size:14px}
 .fb{text-align:center;font-size:18px;margin-top:10px;min-height:28px}
 .hide{display:none}
 .pvRow{display:flex;gap:6px;align-items:center;margin-top:6px}.pvRow input{padding:8px;font-size:15px}
-.pvRow .w{flex:0 0 42%}.pvRow .x{flex:0 0 36px;padding:8px 0;margin:0;background:#fee2e2;color:#b91c1c;font-size:15px}
+.pvRow input[type=checkbox]{width:22px;height:22px;flex:0 0 22px;padding:0}.pvRow .w{flex:0 0 36%}.pvRow.sub .w,.pvRow.sub .m{color:#9ca3af}.pvRow .x{flex:0 0 36px;padding:8px 0;margin:0;background:#fee2e2;color:#b91c1c;font-size:15px}
 .bk{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #eee}
 .bk .n{color:#9ca3af;font-size:13px;width:26px}.bk .w{font-weight:700;font-size:17px;flex:1}.bk .m{color:#374151;flex:1.2}
 .setRow{display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid #eee}.setRow label{flex:1;display:flex;align-items:center;gap:8px}
 .setRow input[type=checkbox]{width:22px;height:22px}.setRow button{width:auto;margin:0;padding:6px 8px;font-size:13px;background:#e5e7eb;color:#111}
 .setRow .act{background:#4f46e5;color:#fff}.bkHead{font-weight:700;margin:14px 0 4px;color:#4f46e5}
 .bk .lv{font-size:12px;color:#6b7280;width:34px;text-align:right}.bk button{width:auto;margin:0;padding:6px 8px;font-size:13px;background:#e5e7eb;color:#111}
-#pad{width:100%;height:190px;background:#fff;border:2px dashed #a5b4fc;border-radius:12px;touch-action:none;display:block}
 </style>
 </head>
 <body><div class="wrap">
@@ -63,7 +62,11 @@ textarea{height:160px;font-size:14px}
       <button class="sub" style="flex:1.6;margin:0" onclick="selRange()">회차 범위 선택</button>
     </div>
     <div class="row"><button class="sub" onclick="selAll(true)">전체 선택</button><button class="sub" onclick="selAll(false)">전체 해제</button></div>
-    <button onclick="newSet()">➕ 새 회차 만들기</button>
+    <div class="row" style="align-items:center;margin-top:8px">
+      <input id="newSetName" placeholder="새 회차 이름 (비우면 자동)" style="flex:2;font-size:15px;padding:10px">
+      <button style="flex:1.3;margin:0" onclick="newSet()">➕ 새 회차 만들기</button>
+    </div>
+    <button class="sub" onclick="clearWords()" style="background:#fee2e2;color:#b91c1c">🗑 선택한 회차의 단어 전부 삭제</button>
   </div>
 
   <!-- 직접 입력 -->
@@ -81,11 +84,9 @@ textarea{height:160px;font-size:14px}
   <!-- 붙여넣기 / 사진 -->
   <div class="card">
     <h2>📋 여러 단어 한꺼번에 넣기 <span class="hint" id="pvTarget"></span></h2>
-    <p class="hint">갤러리에서 사진 열기 → <b>텍스트 추출</b>(삼성) 또는 <b>구글 렌즈</b> → 복사 → 아래 버튼. 폰의 인식 기능이 앱 안의 것보다 훨씬 정확해요.</p>
-    <button onclick="pasteText()">📋 복사한 글 붙여넣기</button>
-    <p class="hint" style="margin-top:10px">또는 아래 칸에 직접 쓰기 — 형식: <b>영어단어 한글뜻</b> (한 줄에 하나)</p>
+    <p class="hint">아래 칸에 직접 쓰거나(형식: <b>영어단어 한글뜻</b>, 한 줄에 하나) 사진을 읽히면 단어 목록이 떠요.</p>
     <textarea id="raw" placeholder="apple 사과&#10;beautiful 아름다운&#10;..." oninput="previewDirty()"></textarea>
-    <button class="sub" onclick="preview()">🔍 단어/뜻 나누기 확인</button>
+    <button class="sub" onclick="preview()">🔍 글 칸의 단어 확인하기</button>
     <h2 style="margin-top:16px">📷 사진으로 읽기</h2>
     <p class="hint">갤러리에서 사진 고르기(여러 장 가능) 또는 카메라로 바로 찍기. 한 쪽씩, 정면에서, 밝게 찍을수록 잘 읽어요. 두 쪽이 한 장에 있으면 자동으로 나눠 읽습니다.</p>
     <!-- 웹 버전: 파일 선택창 / 안드로이드 앱: 아래 androidBox 가 대신 보임 -->
@@ -102,13 +103,12 @@ textarea{height:160px;font-size:14px}
     <div id="ocrStatus" class="hint"></div>
     <!-- 확인 표 -->
     <div id="pv" class="hide">
-      <h2 style="margin-top:14px">확인</h2>
+      <h2 style="margin-top:14px">단어 확인</h2>
       <p class="hint" id="pvSum"></p>
-      <label class="hint" style="display:block;margin-bottom:6px"><input type="checkbox" id="pvAll" onchange="preview()"> 파생어·숙어도 포함 (예: radical → radically, take A for granted)</label>
+      <div class="row"><button class="sub" onclick="pvCheckAll(true)">모두 체크</button><button class="sub" onclick="pvCheckAll(false)">모두 해제</button></div>
       <div id="pvRows"></div>
-      <div id="pvBad" class="hint"></div>
-      <button onclick="loadWords(true)">이 회차에 추가</button>
-      <button class="sub" onclick="loadWords(false)">이 회차를 비우고 새로 넣기</button>
+      <button onclick="loadWords(true)">☑ 체크한 단어를 이 회차에 추가</button>
+      <button class="sub" onclick="loadWords(false)">☑ 체크한 단어로 이 회차를 새로 채우기 (기존 단어 삭제)</button>
     </div>
   </div>
   <div class="card" id="stat"></div>
@@ -117,12 +117,7 @@ textarea{height:160px;font-size:14px}
     <button onclick="startStudy()">📖 학습하기 (외우기)</button>
     <button onclick="startQuiz()">✍️ 단계별 검증</button>
     <button onclick="startQuiz(true)" class="sub">❌ 오답만 다시</button>
-  </div>
-  <div class="card">
-    <h2>🗑 초기화</h2>
-    <button class="sub" onclick="resetProgress()">🔄 선택한 회차의 학습 진도만 초기화 (단어는 유지)</button>
-    <button class="sub" onclick="clearWords()" style="background:#fee2e2;color:#b91c1c">🗑 선택한 회차의 단어 전부 삭제</button>
-    <button class="sub" onclick="if(confirm('앱의 모든 저장 내용(단어장·설정)을 지우고 처음 상태로 되돌릴까요?')){localStorage.clear();location.reload()}">⚠️ 전체 초기화</button>
+    <button class="sub" onclick="resetProgress()">🔄 선택한 회차의 학습 진도 초기화 (단어는 유지)</button>
   </div>
 </div>
 
@@ -134,7 +129,6 @@ textarea{height:160px;font-size:14px}
     <input id="bookSearch" placeholder="검색 (영어·한글)" oninput="renderBook()" style="font-size:15px">
     <p class="hint">단어나 뜻을 누르면 고칠 수 있어요. ⭐ 0~5는 통과한 단계.</p>
     <div id="bookList"></div>
-    <div class="row"><button class="sub" onclick="resetProgress()">🔄 진도 초기화</button><button class="sub" onclick="clearWords()" style="background:#fee2e2;color:#b91c1c">🗑 전부 삭제</button></div>
     <button class="sub" onclick="go('home')">홈으로</button>
   </div>
 </div>
@@ -163,23 +157,15 @@ textarea{height:160px;font-size:14px}
     <div class="word" id="qShow" style="letter-spacing:4px;color:#4f46e5"></div>
     <button class="sub" onclick="speak(cur.w)" style="margin-top:0">🔊 발음 듣기</button>
     
-    <!-- 손글씨 입력 -->
-    <div id="qPadBox">
-      <canvas id="pad"></canvas>
-      <div class="hint" style="text-align:center;margin-top:4px">손가락이나 펜으로 영어 단어를 쓰세요 (소문자, 또박또박, 긴 단어는 작게)</div>
-      <div class="row"><button class="sub" onclick="padClear()">지우기</button><button onclick="submitPad()">✅ 채점</button></div>
-      <div class="row"><button class="sub" onclick="setInputMode('type')">⌨️ 자판으로</button><button class="sub hide" id="padOkBtn" onclick="padOverride()">맞게 썼는데 잘못 읽었어요</button></div>
-    </div>
-    <!-- 자판 입력 -->
-    <div id="qInputBox" class="hide"><input id="qIn" autocomplete="off" autocapitalize="off" placeholder="영어 단어 입력"><button onclick="submitType()">확인</button>
-      <button class="sub" onclick="setInputMode('pad')">✍️ 손글씨로</button></div>
+    <div id="qOpts"></div>
+    <div id="qInputBox" class="hide"><input id="qIn" autocomplete="off" autocapitalize="off" placeholder="영어 단어 입력"><button onclick="submitType()">확인</button></div>
     <div class="fb" id="qFb"></div>
     <button class="sub" onclick="go('home')">홈으로</button>
   </div>
 </div>
 
 <script>
-const STAGE=["","보고 따라 쓰기","철자 채우기","첫글자 힌트","뜻만 보고 쓰기","최종 시험"];
+const STAGE=["","4지선다","철자 채우기","첫글자 힌트","뜻만 보고 쓰기","최종 시험"];
 /* 회차(단어장) 여러 개: sets = [{id, name, words:[{w,m,lv,wrong}]}] */
 let sets=JSON.parse(localStorage.getItem('sets')||'null');
 if(!sets){const old=JSON.parse(localStorage.getItem('words')||'[]');sets=[{id:1,name:'1회차',words:old}];localStorage.removeItem('words');}
@@ -216,9 +202,11 @@ function selRange(){
 }
 function setActive(id){activeId=id;save();renderSets();}
 function newSet(){
-  const name=prompt('새 회차 이름',(sets.length+1)+'회차');if(name===null)return;
-  const id=Math.max(0,...sets.map(s=>s.id))+1;sets.push({id,name:name.trim()||(sets.length+1)+'회차',words:[]});
-  activeId=id;selIds=[id];save();renderStat();renderSets();
+  const inp=document.getElementById('newSetName');
+  const name=(inp.value||'').trim()||(sets.length+1)+'회차';
+  const id=Math.max(0,...sets.map(s=>s.id))+1;sets.push({id,name,words:[]});
+  activeId=id;selIds=[id];inp.value='';save();renderStat();renderSets();
+  document.getElementById('qiLog').textContent=`✅ '${name}' 를 만들었어요. 이제 새 단어는 여기에 들어가요.`;
 }
 function renameSet(id){const st=sets.find(s=>s.id===id);const v=prompt('회차 이름 고치기',st.name);if(v&&v.trim()){st.name=v.trim();save();renderSets();}}
 function delSet(id){
@@ -351,7 +339,7 @@ function parseLines(text){
         .replace(/\s+\.\s+/g,' ').replace(/(^|\/ )([명동형부전접대감])\s+(?=[\d(가-힣])/g,'$1[$2] ').trim(); // 품사 한 글자는 [명] 식으로
     const kor=(mn.match(/[가-힣]/g)||[]).length,all=(mn.match(/[가-힣A-Za-z0-9]/g)||[]).length;
     // 뜻이 너무 짧거나(1글자) 한글 비율이 낮으면 잡음
-    if(kor<2||kor<all*0.6||mn.length>60||(toks.length>=3&&kor<4)){bad.push(orig);continue;} // 여러 단어인데 뜻이 짧으면 예문 조각
+    if(kor<1||(kor<2&&all>kor)||kor<all*0.6||mn.length>60||(toks.length>=3&&kor<4)){bad.push(orig);continue;} // 한 글자 뜻(구, 책)은 순수 한글일 때만 허용 // 여러 단어인데 뜻이 짧으면 예문 조각
     ok.push({w,m:mn,coded,bullet,phrase:toks.length>=3});
   }
   // 메인 단어 판정: 번호가 하나라도 있으면 번호 있는 것만 메인, 없으면 •표시·숙어·앞부분 같은 파생어를 제외
@@ -370,24 +358,22 @@ function parseLines(text){
 let pvDirtyFlag=false;
 function previewDirty(){pvDirtyFlag=true;}
 function preview(){
-  const {ok,bad}=parseLines(document.getElementById('raw').value);
+  const {ok}=parseLines(document.getElementById('raw').value);
   const pv=document.getElementById('pv'),rows=document.getElementById('pvRows');
-  pv.classList.remove('hide');rows.innerHTML='';pvDirtyFlag=false;
-  const all=document.getElementById('pvAll').checked;
-  let skipped=0;
+  rows.innerHTML='';pvDirtyFlag=false;
+  if(!ok.length){pv.classList.add('hide');document.getElementById('ocrStatus').textContent='단어를 찾지 못했어요. "apple 사과" 형식인지 확인해주세요.';return;}
+  pv.classList.remove('hide');
   ok.forEach(x=>{
-    if(!all&&!x.main){skipped++;return;}
-    const d=document.createElement('div');d.className='pvRow';
-    d.innerHTML=`<input class="w" value="${x.w}" autocapitalize="off"><input class="m" value="${x.m}"><button class="x" onclick="this.parentNode.remove();pvCount()">✕</button>`;
+    const d=document.createElement('div');d.className='pvRow'+(x.main?'':' sub');
+    d.innerHTML=`<input type="checkbox" ${x.main?'checked':''} onchange="this.parentNode.classList.toggle('sub',!this.checked);pvCount()"><input class="w" value="${x.w}" autocapitalize="off"><input class="m" value="${x.m}">`;
     rows.appendChild(d);
   });
-  if(!all&&skipped)bad.unshift(`(파생어·숙어 ${skipped}개는 뺐어요 — 위 체크박스로 포함 가능)`);
-  document.getElementById('pvBad').innerHTML=bad.length?`⚠️ 못 읽은 줄 ${bad.length}개 (위 칸에 직접 쓰거나 무시):<br>`+bad.map(b=>'· '+b.replace(/</g,'&lt;')).join('<br>'):'';
-  if(!ok.length&&!bad.length)pv.classList.add('hide');
   pvCount();
 }
-function pvCount(){const n=document.querySelectorAll('#pvRows .pvRow').length;document.getElementById('pvSum').textContent=`단어 ${n}개를 찾았어요. 틀린 글자는 칸을 눌러 고치고, 필요 없는 줄은 ✕ 로 지우세요.`;}
-function pvWords(){return[...document.querySelectorAll('#pvRows .pvRow')].map(r=>({w:r.querySelector('.w').value.trim().toLowerCase(),m:r.querySelector('.m').value.trim()})).filter(x=>x.w&&x.m);}
+function pvCheckAll(on){document.querySelectorAll('#pvRows input[type=checkbox]').forEach(c=>{c.checked=on;c.parentNode.classList.toggle('sub',!on);});pvCount();}
+function pvCount(){const n=document.querySelectorAll('#pvRows input[type=checkbox]:checked').length,t=document.querySelectorAll('#pvRows .pvRow').length;
+  document.getElementById('pvSum').textContent=`단어 ${t}개 중 ${n}개 체크됨. 메인 단어는 체크, 파생어·숙어는 해제 상태로 시작해요. 칸을 눌러 글자를 고칠 수 있어요.`;}
+function pvWords(){return[...document.querySelectorAll('#pvRows .pvRow')].filter(r=>r.querySelector('input[type=checkbox]').checked).map(r=>({w:r.querySelector('.w').value.trim().toLowerCase(),m:r.querySelector('.m').value.trim()})).filter(x=>x.w&&x.m);}
 document.getElementById('photo').onchange=e=>{ocrFiles([...e.target.files]);e.target.value='';};
 /* 직접 입력 */
 function quickAdd(){
@@ -409,10 +395,6 @@ function addText(t){
   raw.value=(raw.value.trim()?raw.value.trim()+'\n':'')+t.trim()+'\n';
   document.getElementById('ocrStatus').textContent='글을 받았어요. 아래에서 단어·뜻이 맞게 나뉘었는지 확인하세요.';preview();
 }
-async function pasteText(){
-  try{const t=await navigator.clipboard.readText();if(!t.trim())return alert('복사된 글이 없어요. 먼저 텍스트 추출에서 복사하세요.');addText(t);}
-  catch(e){alert('붙여넣기 권한이 없어요. 아래 글 칸을 길게 눌러 직접 붙여넣어 주세요.');document.getElementById('raw').focus();}
-}
 (function(){const q=new URLSearchParams(location.search);const t=(q.get('text')||'')+'\n'+(q.get('title')||'');
   if(t.trim()){addText(t);history.replaceState(null,'',location.pathname);}})();
 document.getElementById('camera').onchange=e=>{ocrFiles([...e.target.files]);e.target.value='';};
@@ -422,7 +404,7 @@ function loadWords(append){
   if(pvDirtyFlag)preview();                       // 글을 고친 뒤 확인표를 안 눌렀으면 다시 읽기
   const tgt=activeSet();const list=[],seen=new Set(append?tgt.words.map(x=>x.w):[]);
   for(const x of pvWords()){if(seen.has(x.w))continue;seen.add(x.w);list.push({w:x.w,m:x.m,lv:0,wrong:0});}
-  if(!list.length)return alert(append?'새로 추가할 단어가 없어요.':'등록할 단어가 없어요. 인식 결과 확인 표를 먼저 봐주세요.');
+  if(!list.length){document.getElementById('ocrStatus').textContent=append?'새로 추가할 단어가 없어요 (체크했는지, 이미 있는 단어인지 확인).':'체크된 단어가 없어요.';return;}
   if(!append&&tgt.words.length&&!confirm(`'${tgt.name}'의 단어 ${tgt.words.length}개를 지우고 새로 넣을까요?`))return;
   tgt.words=append?tgt.words.concat(list):list;if(!selIds.includes(tgt.id))selIds.push(tgt.id);save();renderStat();
   document.getElementById('raw').value='';document.getElementById('ocrStatus').textContent='';document.getElementById('ocrBar').style.width='0';
@@ -498,82 +480,40 @@ function sMove(d){sI=(sI+d+words.length)%words.length;showStudy();}
 function startQuiz(wrong=false){
   if(!words.length)return alert('체크한 회차에 단어가 없어요. 회차를 선택하거나 단어를 넣어주세요.');onlyWrong=wrong;
   let pool=words.filter(w=>w.lv<5&&(!wrong||w.wrong>0));
-  if(!pool.length)return alert(wrong?'오답이 없어요!':'🎉 모든 단어를 완벽히 외웠어요!');
+  if(!pool.length){go('home');document.getElementById('qiLog').textContent=wrong?'❌ 오답이 없어요!':'🎉 선택한 회차의 모든 단어를 완벽히 외웠어요!';return;}
   const minLv=Math.min(...pool.map(w=>w.lv));queue=shuffle(pool.filter(w=>w.lv===minLv));qI=0;go('quiz');ask();
 }
 function ask(){
-  if(qI>=queue.length){alert('이번 라운드 끝! 계속 진행합니다.');return startQuiz(onlyWrong);}
+  if(qI>=queue.length){return startQuiz(onlyWrong);}
   cur=queue[qI];const st=cur.lv+1;
   document.getElementById('qStage').textContent=st+'단계 · '+STAGE[st];
   document.getElementById('qCount').textContent=(qI+1)+'/'+queue.length;
   document.getElementById('qBar').style.width=(cur.lv/5*100)+'%';
   document.getElementById('qMean').textContent=cur.m;document.getElementById('qFb').textContent='';
-  const show=document.getElementById('qShow'),ib=document.getElementById('qInputBox'),inp=document.getElementById('qIn');
-  show.textContent='';inp.value='';
-  if(st===1){show.textContent=cur.w;}           // 단어를 보여주고 그대로 입력
-  if(st===2){const a=cur.w.split('');for(let i=1;i<a.length-1;i++)if(Math.random()<.5)a[i]='_';show.textContent=a.join('');}
-  if(st===3)show.textContent=cur.w[0]+'_'.repeat(cur.w.length-1);
-  setInputMode(inputMode);                                    // 손글씨/자판 중 마지막에 쓰던 방식으로
-  if(inputMode==='pad')padClear();
+  const show=document.getElementById('qShow'),opts=document.getElementById('qOpts'),ib=document.getElementById('qInputBox'),inp=document.getElementById('qIn');
+  opts.innerHTML='';show.textContent='';inp.value='';
+  if(st===1){                                   // 4지선다: 같은 회차(선택한 회차)의 다른 단어들이 오답 보기
+    ib.classList.add('hide');
+    let others=words.filter(x=>x!==cur&&x.w!==cur.w);
+    if(others.length<3)sets.forEach(s=>s.words.forEach(x=>{if(x.w!==cur.w&&!others.includes(x))others.push(x);})); // 모자라면 다른 회차에서
+    const c=shuffle([cur,...shuffle(others).slice(0,3)]);
+    c.forEach(x=>{const b=document.createElement('button');b.className='opt';b.textContent=x.w;b.onclick=()=>{if(!judging){judging=true;[...opts.children].forEach(o=>o.disabled=true);judge(x.w===cur.w);}};opts.appendChild(b);});
+  }else{
+    ib.classList.remove('hide');
+    if(st===2){const a=cur.w.split('');for(let i=1;i<a.length-1;i++)if(Math.random()<.5)a[i]='_';show.textContent=a.join('');}
+    if(st===3)show.textContent=cur.w[0]+'_'.repeat(cur.w.length-1);
+    inp.focus();
+  }
 }
+let judging=false;
 document.getElementById('qIn').addEventListener('keydown',e=>{if(e.key==='Enter')submitType();});
 function submitType(){judge(document.getElementById('qIn').value.trim().toLowerCase()===cur.w);}
 
-/* ---------- 손글씨 입력 ---------- */
-let inputMode=localStorage.getItem('inputMode')||'pad', drawing=false, strokes=0, judging=false;
-const pad=document.getElementById('pad'), pctx=pad.getContext('2d');
-function padResize(){const r=pad.getBoundingClientRect();if(!r.width)return;pad.width=r.width*2;pad.height=r.height*2;padClear();}
-function padClear(){pctx.fillStyle='#fff';pctx.fillRect(0,0,pad.width,pad.height);
-  pctx.strokeStyle='#e5e7eb';pctx.lineWidth=2;pctx.beginPath();pctx.moveTo(0,pad.height*.72);pctx.lineTo(pad.width,pad.height*.72);pctx.stroke(); // 기준선
-  pctx.strokeStyle='#111';pctx.lineWidth=7;pctx.lineCap='round';pctx.lineJoin='round';strokes=0;
-  document.getElementById('padOkBtn').classList.add('hide');}
-const pos=e=>{const r=pad.getBoundingClientRect();return[(e.clientX-r.left)*2,(e.clientY-r.top)*2];};
-pad.addEventListener('pointerdown',e=>{drawing=true;strokes++;pad.setPointerCapture(e.pointerId);const[x,y]=pos(e);pctx.beginPath();pctx.moveTo(x,y);pctx.lineTo(x+.1,y);pctx.stroke();});
-pad.addEventListener('pointermove',e=>{if(!drawing)return;const[x,y]=pos(e);pctx.lineTo(x,y);pctx.stroke();});
-['pointerup','pointercancel','pointerleave'].forEach(t=>pad.addEventListener(t,()=>drawing=false));
-window.addEventListener('resize',padResize);
-function setInputMode(m){inputMode=m;localStorage.setItem('inputMode',m);
-  document.getElementById('qPadBox').classList.toggle('hide',m!=='pad');document.getElementById('qInputBox').classList.toggle('hide',m!=='type');
-  if(m==='pad')setTimeout(padResize,0);else document.getElementById('qIn').focus();}
-let hwWorker=null;                     // 손글씨 전용 인식 엔진 (영어 소문자만 읽도록 설정)
-async function getHwWorker(){
-  if(hwWorker)return hwWorker;
-  const w=await Tesseract.createWorker('eng');
-  await w.setParameters({tessedit_char_whitelist:'abcdefghijklmnopqrstuvwxyz',tessedit_pageseg_mode:'7'}); // 7 = 한 줄로 취급
-  hwWorker=w;return w;
-}
-function padImage(){                  // 글씨 주변만 잘라서 여백을 두고 넘김 (인식률 ↑)
-  const d=pctx.getImageData(0,0,pad.width,pad.height).data;let x0=pad.width,y0=pad.height,x1=0,y1=0;
-  for(let y=0;y<pad.height;y++)for(let x=0;x<pad.width;x++){const i=(y*pad.width+x)*4;if(d[i]<100){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}
-  if(x1<x0)return null;
-  const m=40,c=document.createElement('canvas');c.width=x1-x0+m*2;c.height=y1-y0+m*2;const g=c.getContext('2d');
-  g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(pad,x0,y0,x1-x0,y1-y0,m,m,x1-x0,y1-y0);
-  return c.toDataURL('image/png');
-}
-async function submitPad(){
-  if(judging)return;const fb=document.getElementById('qFb');
-  if(!strokes)return fb.textContent='먼저 글씨를 써주세요.';
-  judging=true;fb.innerHTML='<span style="color:#6b7280">읽는 중...</span>';
-  try{
-    const w=await getHwWorker();const r=await w.recognize(padImage());
-    const read=(r.data.text||'').toLowerCase().replace(/[^a-z]/g,'');
-    if(read===cur.w)judge(true);
-    else{
-      fb.innerHTML=`<span style="color:#dc2626">❌ 읽은 글자: <b>${read||'(없음)'}</b> · 정답: <b>${cur.w}</b></span>`;
-      document.getElementById('padOkBtn').classList.remove('hide');   // 인식이 틀린 경우를 위한 버튼
-      pendingWrong=true;setTimeout(padConfirmWrong,3000);              // 3초 안에 버튼 안 누르면 오답 처리
-    }
-  }catch(e){fb.textContent='인식 실패. 다시 써보거나 자판을 이용하세요.';}
-  judging=false;
-}
-let pendingWrong=false;
-function padOverride(){pendingWrong=false;document.getElementById('padOkBtn').classList.add('hide');judge(true);}
-function padConfirmWrong(){if(pendingWrong){pendingWrong=false;judge(false);}}
 function judge(ok){
   const fb=document.getElementById('qFb');
   if(ok){cur.lv++;fb.innerHTML='<span style="color:#16a34a">⭕ 정답!</span>';}
   else{cur.wrong++;cur.lv=Math.max(0,cur.lv-1);fb.innerHTML=`<span style="color:#dc2626">❌ 정답: <b>${cur.w}</b></span>`;}
-  save();qI++;setTimeout(ask,ok?700:1800);
+  save();qI++;setTimeout(()=>{judging=false;ask();},ok?700:1800);
 }
 
 /* PWA 설치 안내 */
