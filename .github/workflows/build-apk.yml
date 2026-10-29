@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-#  단어암기 앱 → 안드로이드 APK 빌드  (1단계: 웹앱을 앱 껍데기에 넣기)
+#  단어암기 앱 → 안드로이드 APK 빌드  (2단계: 웹 ↔ 안드로이드 다리 + 사진 고르기)
 #
 #  이 파일이 하는 일 (위에서 아래로):
 #   1) 깨끗한 리눅스 컴퓨터를 하나 빌려서(ubuntu) 자바를 깐다
@@ -154,32 +154,81 @@ jobs:
           EOF
 
           # MainActivity.kt: 앱이 켜지면 실행되는 코드 (코틀린 언어)
-          #   WebView = 앱 안에 들어있는 작은 크롬. 여기에 index.html 을 띄운다.
+          #   [2단계] 웹 ↔ 안드로이드 "다리(Bridge)"
+          #     웹(자바스크립트)  →  AndroidBridge.pickImage()  →  안드로이드가 사진 고르기 창을 연다
+          #     안드로이드        →  web.evaluateJavascript("onImagePicked(...)")  →  웹에 사진을 돌려준다
           cat > app/src/main/java/kr/hy/vocab/MainActivity.kt <<'EOF'
           package kr.hy.vocab
 
           import android.app.Activity
+          import android.content.Intent
+          import android.graphics.Bitmap
+          import android.graphics.BitmapFactory
+          import android.net.Uri
           import android.os.Bundle
+          import android.util.Base64
+          import android.webkit.JavascriptInterface
           import android.webkit.WebView
           import android.webkit.WebViewClient
+          import java.io.ByteArrayOutputStream
 
           class MainActivity : Activity() {
             private lateinit var web: WebView
+            private val PICK_IMAGE = 1                 // "사진 고르기 창"을 구분하는 번호
+
+            // ── 다리: 여기 있는 함수들을 웹에서 AndroidBridge.이름() 으로 부를 수 있다 ──
+            inner class Bridge {
+              @JavascriptInterface
+              fun pickImage() {
+                val i = Intent(Intent.ACTION_OPEN_DOCUMENT)   // 안드로이드의 "파일/사진 고르기" 창
+                i.addCategory(Intent.CATEGORY_OPENABLE)
+                i.type = "image/*"
+                runOnUiThread { startActivityForResult(i, PICK_IMAGE) }   // 창을 열고, 결과는 onActivityResult 로 돌아온다
+                // (다리 함수는 별도 스레드에서 불리므로, 화면을 건드리는 일은 runOnUiThread 로 감싼다)
+              }
+            }
 
             override fun onCreate(saved: Bundle?) {
               super.onCreate(saved)
               web = WebView(this)
-              setContentView(web)                       // 화면 전체 = WebView
+              setContentView(web)
 
-              web.settings.javaScriptEnabled = true     // 우리 앱은 자바스크립트로 돌아가니 켜기
-              web.settings.domStorageEnabled = true     // localStorage(단어 저장) 켜기
+              web.settings.javaScriptEnabled = true
+              web.settings.domStorageEnabled = true
               web.settings.allowFileAccess = true
-              web.webViewClient = WebViewClient()       // 링크를 외부 브라우저로 안 보내고 안에서 열기
+              web.webViewClient = WebViewClient()
+              web.addJavascriptInterface(Bridge(), "AndroidBridge")   // ★ 다리 놓기: 웹에서 window.AndroidBridge 로 보임
 
-              web.loadUrl("file:///android_asset/index.html")   // 앱 안에 복사해 둔 index.html 열기
+              web.loadUrl("file:///android_asset/index.html")
             }
 
-            // 뒤로가기 버튼: 웹 페이지 안에서 뒤로 갈 수 있으면 그렇게, 아니면 앱 종료
+            // 사진 고르기 창이 닫히면 여기로 돌아온다
+            override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+              super.onActivityResult(requestCode, resultCode, data)
+              if (requestCode != PICK_IMAGE || resultCode != RESULT_OK) return
+              val uri: Uri = data?.data ?: return
+              try {
+                val bmp = loadScaledBitmap(uri, 1600)                 // 너무 큰 사진은 가로 1600px 로 줄임
+                val out = ByteArrayOutputStream()
+                bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                val b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+                // 웹 쪽 함수 onImagePicked(사진, 가로, 세로) 호출
+                web.evaluateJavascript("onImagePicked('data:image/jpeg;base64,$b64', ${bmp.width}, ${bmp.height})", null)
+              } catch (e: Exception) {
+                web.evaluateJavascript("onAndroidError('사진을 여는 데 실패: ${e.message}')", null)
+              }
+            }
+
+            // 사진 파일을 메모리에 올리되, 긴 변이 maxSide 이하가 되게 줄여서 올린다
+            private fun loadScaledBitmap(uri: Uri, maxSide: Int): Bitmap {
+              val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+              contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, opts) }
+              var sample = 1
+              while (opts.outWidth / sample > maxSide || opts.outHeight / sample > maxSide) sample *= 2
+              val o2 = BitmapFactory.Options().apply { inSampleSize = sample }
+              return contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, o2)!! }
+            }
+
             override fun onBackPressed() {
               if (web.canGoBack()) web.goBack() else super.onBackPressed()
             }
