@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-#  단어암기 앱 → 안드로이드 APK 빌드  (2단계: 웹 ↔ 안드로이드 다리 + 사진 고르기)
+#  단어암기 앱 → 안드로이드 APK 빌드  (3단계: ML Kit 으로 사진 속 글자 읽기)
 #
 #  이 파일이 하는 일 (위에서 아래로):
 #   1) 깨끗한 리눅스 컴퓨터를 하나 빌려서(ubuntu) 자바를 깐다
@@ -116,7 +116,8 @@ jobs:
           }
 
           dependencies {
-            // (3단계에서 추가) implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
+            // 구글 ML Kit 글자 인식 (한국어+영어 모델이 앱 안에 들어감 → 오프라인 동작)
+            implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
           }
           EOF
 
@@ -154,37 +155,38 @@ jobs:
           EOF
 
           # MainActivity.kt: 앱이 켜지면 실행되는 코드 (코틀린 언어)
-          #   [2단계] 웹 ↔ 안드로이드 "다리(Bridge)"
-          #     웹(자바스크립트)  →  AndroidBridge.pickImage()  →  안드로이드가 사진 고르기 창을 연다
-          #     안드로이드        →  web.evaluateJavascript("onImagePicked(...)")  →  웹에 사진을 돌려준다
+          #   [2단계] 다리: 웹 → AndroidBridge.pickImage() → 사진 고르기 창
+          #   [3단계] 고른 사진을 ML Kit 에 넘겨 글자를 읽고 → 웹의 onOcrText(글) 로 돌려준다
           cat > app/src/main/java/kr/hy/vocab/MainActivity.kt <<'EOF'
           package kr.hy.vocab
 
           import android.app.Activity
           import android.content.Intent
-          import android.graphics.Bitmap
-          import android.graphics.BitmapFactory
           import android.net.Uri
           import android.os.Bundle
-          import android.util.Base64
           import android.webkit.JavascriptInterface
           import android.webkit.WebView
           import android.webkit.WebViewClient
-          import java.io.ByteArrayOutputStream
+          import com.google.mlkit.vision.common.InputImage
+          import com.google.mlkit.vision.text.TextRecognition
+          import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
+          import org.json.JSONObject
 
           class MainActivity : Activity() {
             private lateinit var web: WebView
-            private val PICK_IMAGE = 1                 // "사진 고르기 창"을 구분하는 번호
+            private val PICK_IMAGE = 1
 
-            // ── 다리: 여기 있는 함수들을 웹에서 AndroidBridge.이름() 으로 부를 수 있다 ──
+            // ML Kit 글자 인식기 (한국어 모델). 한 번 만들어 계속 재사용
+            private val recognizer by lazy { TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build()) }
+
             inner class Bridge {
               @JavascriptInterface
               fun pickImage() {
-                val i = Intent(Intent.ACTION_OPEN_DOCUMENT)   // 안드로이드의 "파일/사진 고르기" 창
+                val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
                 i.addCategory(Intent.CATEGORY_OPENABLE)
                 i.type = "image/*"
-                runOnUiThread { startActivityForResult(i, PICK_IMAGE) }   // 창을 열고, 결과는 onActivityResult 로 돌아온다
-                // (다리 함수는 별도 스레드에서 불리므로, 화면을 건드리는 일은 runOnUiThread 로 감싼다)
+                i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)          // 여러 장 선택 허용
+                runOnUiThread { startActivityForResult(i, PICK_IMAGE) }
               }
             }
 
@@ -192,42 +194,71 @@ jobs:
               super.onCreate(saved)
               web = WebView(this)
               setContentView(web)
-
               web.settings.javaScriptEnabled = true
               web.settings.domStorageEnabled = true
               web.settings.allowFileAccess = true
               web.webViewClient = WebViewClient()
-              web.addJavascriptInterface(Bridge(), "AndroidBridge")   // ★ 다리 놓기: 웹에서 window.AndroidBridge 로 보임
-
+              web.addJavascriptInterface(Bridge(), "AndroidBridge")
               web.loadUrl("file:///android_asset/index.html")
             }
 
-            // 사진 고르기 창이 닫히면 여기로 돌아온다
+            // 사진 고르기 창이 닫히면: 고른 사진들을 하나씩 ML Kit 에 넘긴다
             override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
               super.onActivityResult(requestCode, resultCode, data)
-              if (requestCode != PICK_IMAGE || resultCode != RESULT_OK) return
-              val uri: Uri = data?.data ?: return
+              if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null) return
+              val uris = ArrayList<Uri>()
+              val clip = data.clipData
+              if (clip != null) for (k in 0 until clip.itemCount) uris.add(clip.getItemAt(k).uri)
+              else data.data?.let { uris.add(it) }
+              if (uris.isEmpty()) return
+              js("onOcrStart(${uris.size})")
+              recognizeNext(uris, 0)
+            }
+
+            // uris[idx] 를 읽고, 끝나면 다음 사진으로 (재귀)
+            private fun recognizeNext(uris: List<Uri>, idx: Int) {
+              if (idx >= uris.size) { js("onOcrDone()"); return }
               try {
-                val bmp = loadScaledBitmap(uri, 1600)                 // 너무 큰 사진은 가로 1600px 로 줄임
-                val out = ByteArrayOutputStream()
-                bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
-                val b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-                // 웹 쪽 함수 onImagePicked(사진, 가로, 세로) 호출
-                web.evaluateJavascript("onImagePicked('data:image/jpeg;base64,$b64', ${bmp.width}, ${bmp.height})", null)
+                // fromFilePath = 사진의 회전 정보(EXIF)까지 알아서 처리해 줌
+                val image = InputImage.fromFilePath(this, uris[idx])
+                recognizer.process(image)
+                  .addOnSuccessListener { result ->
+                    val text = linesInReadingOrder(result)
+                    js("onOcrText(${JSONObject.quote(text)}, ${idx + 1}, ${uris.size})")
+                    recognizeNext(uris, idx + 1)
+                  }
+                  .addOnFailureListener { e ->
+                    js("onAndroidError(${JSONObject.quote("인식 실패: " + e.message)})")
+                    recognizeNext(uris, idx + 1)
+                  }
               } catch (e: Exception) {
-                web.evaluateJavascript("onAndroidError('사진을 여는 데 실패: ${e.message}')", null)
+                js("onAndroidError(${JSONObject.quote("사진 열기 실패: " + e.message)})")
+                recognizeNext(uris, idx + 1)
               }
             }
 
-            // 사진 파일을 메모리에 올리되, 긴 변이 maxSide 이하가 되게 줄여서 올린다
-            private fun loadScaledBitmap(uri: Uri, maxSide: Int): Bitmap {
-              val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-              contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, opts) }
-              var sample = 1
-              while (opts.outWidth / sample > maxSide || opts.outHeight / sample > maxSide) sample *= 2
-              val o2 = BitmapFactory.Options().apply { inSampleSize = sample }
-              return contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, o2)!! }
+            // ML Kit 은 글자를 "덩어리(block) > 줄(line)" 로 주는데, 두 열짜리 단어장은 덩어리 순서가 뒤섞인다.
+            // 그래서 모든 줄을 세로 위치(y)로 정렬하고, 같은 높이의 줄은 가로 위치(x) 순으로 이어 붙여
+            // "radical**   형 1. 급진적인, 과격한" 처럼 실제 한 줄을 복원한다.
+            private fun linesInReadingOrder(result: com.google.mlkit.vision.text.Text): String {
+              data class L(val y: Int, val x: Int, val h: Int, val t: String)
+              val all = ArrayList<L>()
+              for (b in result.textBlocks) for (ln in b.lines) {
+                val r = ln.boundingBox ?: continue
+                all.add(L(r.centerY(), r.left, r.height(), ln.text))
+              }
+              all.sortBy { it.y }
+              val rows = ArrayList<ArrayList<L>>()
+              for (l in all) {
+                val last = rows.lastOrNull()
+                if (last != null && Math.abs(last[0].y - l.y) < Math.max(last[0].h, l.h) * 0.6) last.add(l)
+                else rows.add(arrayListOf(l))
+              }
+              return rows.joinToString("\n") { row -> row.sortedBy { it.x }.joinToString("  ") { it.t } }
             }
+
+            // 웹 쪽 함수를 부르는 도우미 (항상 화면 스레드에서)
+            private fun js(code: String) { runOnUiThread { web.evaluateJavascript(code, null) } }
 
             override fun onBackPressed() {
               if (web.canGoBack()) web.goBack() else super.onBackPressed()
