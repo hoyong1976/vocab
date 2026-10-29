@@ -80,6 +80,7 @@ textarea{height:160px;font-size:14px}
     <div id="pv" class="hide">
       <h2 style="margin-top:14px">확인</h2>
       <p class="hint" id="pvSum"></p>
+      <label class="hint" style="display:block;margin-bottom:6px"><input type="checkbox" id="pvAll" onchange="preview()"> 파생어·숙어도 포함 (예: radical → radically, take A for granted)</label>
       <div id="pvRows"></div>
       <div id="pvBad" class="hint"></div>
       <button onclick="loadWords(true)">단어장에 추가</button>
@@ -219,7 +220,10 @@ function joinSplitEntries(text){
   for(let i=0;i<lines.length;i++){
     const l=lines[i];
     if(!isHead(l)){out.push(l);continue;}
-    const head=l.replace(/^[^A-Za-z]+/,'').replace(/\*+$/,'').trim();const means=[];let j=i+1;
+    let k=i-1;while(k>=0&&!lines[k])k--;                                   // 바로 앞 줄(빈 줄 제외)에 0006 같은 번호가 있으면 메인 단어
+    const coded=k>=0&&/^\d{3,4}$/.test(lines[k]);
+    const bullet=/^[•·▪◦\-]/.test(l);
+    const head=(coded?'§':bullet?'‡':'')+l.replace(/^[^A-Za-z]+/,'').replace(/\*+$/,'').trim();const means=[];let j=i+1;
     for(;j<lines.length;j++){
       const n=lines[j];
       if(isSkip(n))continue;
@@ -240,7 +244,8 @@ function parseLines(text){
     // 줄 앞의 잡동사니(번호, |, «, 기호) 제거 — 단, 한글이 3자 이상 앞서 있으면 표제어 줄이 아님
     const pre=orig.match(/^[^A-Za-z]*/)[0];
     if((pre.match(/[가-힣]/g)||[]).length>=3){bad.push(orig);continue;}
-    l=orig.slice(pre.length).replace(/[□■☐✓✔★☆※•·▪◦]/g,' ').trim();
+    const coded=pre.includes('§'),bullet=/[•·▪◦‡]|^\s*-\s/.test(pre);          // § = 번호 있는 메인 단어, • = 파생어 표시
+    l=orig.slice(pre.length).replace(/[□■☐✓✔★☆※•·▪◦§‡]/g,' ').trim();
     // 표제어 = 줄 맨 앞의 영어 (1~4단어, 뒤에 * 가능) → 발음기호[...]나 (..) → 한글 뜻
     const m=l.match(/^([A-Za-z][A-Za-z']*(?:[ -][A-Za-z']+){0,3})\s*\*{0,3}\s*(?:\[[^\]]*\])?\s*(?:\([^)]*\))?\s*[:\-=,|.]?\s*(.*)$/);
     if(!m){bad.push(orig);continue;}
@@ -263,8 +268,18 @@ function parseLines(text){
     const kor=(mn.match(/[가-힣]/g)||[]).length,all=(mn.match(/[가-힣A-Za-z0-9]/g)||[]).length;
     // 뜻이 너무 짧거나(1글자) 한글 비율이 낮으면 잡음
     if(kor<2||kor<all*0.6||mn.length>60||(toks.length>=3&&kor<4)){bad.push(orig);continue;} // 여러 단어인데 뜻이 짧으면 예문 조각
-    ok.push({w,m:mn});
+    ok.push({w,m:mn,coded,bullet,phrase:toks.length>=3});
   }
+  // 메인 단어 판정: 번호가 하나라도 있으면 번호 있는 것만 메인, 없으면 •표시·숙어·앞부분 같은 파생어를 제외
+  const anyCoded=ok.some(x=>x.coded);
+  ok.forEach(x=>{
+    if(anyCoded){x.main=x.coded;return;}
+    if(x.bullet||x.phrase){x.main=false;return;}
+    const base=x.w.split(' ')[0];
+    const SUF=/^(ly|ily|ness|ment|ion|tion|ation|ity|ty|ence|ance|ent|ant|al|ial|ful|less|er|or|ive|ation|ism|ist|ize|ise|ish|ous|ious|able|ible|ed|ing|s|es|ies)$/;
+    x.main=!ok.some(y=>{if(y===x||y.phrase)return false;const b=y.w.split(' ')[0];if(b.length<3||b.length>=base.length)return false;
+      for(const stem of[b,b.replace(/e$/,''),b.replace(/y$/,'i'),b.replace(/e$/,'i')])if(base.startsWith(stem)&&SUF.test(base.slice(stem.length)))return true;return false;});
+  });
   return{ok,bad};
 }
 /* 인식 확인 표 */
@@ -274,11 +289,15 @@ function preview(){
   const {ok,bad}=parseLines(document.getElementById('raw').value);
   const pv=document.getElementById('pv'),rows=document.getElementById('pvRows');
   pv.classList.remove('hide');rows.innerHTML='';pvDirtyFlag=false;
+  const all=document.getElementById('pvAll').checked;
+  let skipped=0;
   ok.forEach(x=>{
+    if(!all&&!x.main){skipped++;return;}
     const d=document.createElement('div');d.className='pvRow';
     d.innerHTML=`<input class="w" value="${x.w}" autocapitalize="off"><input class="m" value="${x.m}"><button class="x" onclick="this.parentNode.remove();pvCount()">✕</button>`;
     rows.appendChild(d);
   });
+  if(!all&&skipped)bad.unshift(`(파생어·숙어 ${skipped}개는 뺐어요 — 위 체크박스로 포함 가능)`);
   document.getElementById('pvBad').innerHTML=bad.length?`⚠️ 못 읽은 줄 ${bad.length}개 (위 칸에 직접 쓰거나 무시):<br>`+bad.map(b=>'· '+b.replace(/</g,'&lt;')).join('<br>'):'';
   if(!ok.length&&!bad.length)pv.classList.add('hide');
   pvCount();
