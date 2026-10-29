@@ -1,0 +1,210 @@
+# ─────────────────────────────────────────────────────────────
+#  단어암기 앱 → 안드로이드 APK 빌드  (1단계: 웹앱을 앱 껍데기에 넣기)
+#
+#  이 파일이 하는 일 (위에서 아래로):
+#   1) 깨끗한 리눅스 컴퓨터를 하나 빌려서(ubuntu) 자바를 깐다
+#   2) 안드로이드 프로젝트 폴더를 "그 자리에서" 만든다
+#      - index.html 을 앱 안의 assets 폴더로 복사 (앱이 이 파일을 화면에 띄움)
+#      - MainActivity.kt = 앱이 켜질 때 실행되는 코드. WebView(작은 브라우저)에 index.html 을 연다
+#   3) gradle 이라는 빌드 도구로 APK 를 굽는다 (10분쯤)
+#   4) 구운 APK 를 Release 에 올린다 → 폰에서 내려받아 설치
+# ─────────────────────────────────────────────────────────────
+name: Build APK
+
+on:
+  workflow_dispatch:          # Actions 탭에서 "Run workflow" 버튼으로 직접 실행
+  push:
+    paths:                    # 이 파일들이 바뀌어 올라오면 자동 실행
+      - 'index.html'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write             # Release 를 만들 권한
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4            # 저장소 파일 가져오기
+
+      - uses: actions/setup-java@v4          # 안드로이드 빌드엔 자바 17 필요
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ── 2) 안드로이드 프로젝트 만들기 ─────────────────────────
+      - name: Create Android project
+        run: |
+          set -e
+          mkdir -p app/src/main/java/kr/hy/vocab
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          mkdir -p app/src/main/res/values
+
+          # 웹앱 파일을 앱 안으로 복사 (index.html 하나만 있으면 됨)
+          cp index.html app/src/main/assets/index.html
+          cp icon-512.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+          # settings.gradle: "이 프로젝트엔 app 이라는 모듈이 하나 있다"
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+            repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+            repositories { google(); mavenCentral() }
+          }
+          rootProject.name = 'vocab'
+          include ':app'
+          EOF
+
+          # build.gradle: 어떤 빌드 도구 버전을 쓸지
+          cat > build.gradle <<'EOF'
+          buildscript {
+            repositories { google(); mavenCentral() }
+            dependencies {
+              classpath 'com.android.tools.build:gradle:8.5.2'
+              classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24'
+            }
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx3g
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+          # app/build.gradle: 앱 이름(패키지), 지원 안드로이드 버전, 서명 키
+          #   ※ 3단계에서 여기 dependencies 에 ML Kit 한 줄이 추가될 예정
+          cat > app/build.gradle <<'EOF'
+          apply plugin: 'com.android.application'
+          apply plugin: 'org.jetbrains.kotlin.android'
+
+          android {
+            namespace 'kr.hy.vocab'
+            compileSdk 34
+
+            defaultConfig {
+              applicationId 'kr.hy.vocab'      // 폰 안에서 이 앱을 구분하는 이름. 바꾸면 "다른 앱"이 됨
+              minSdk 26                        // 안드로이드 8 이상
+              targetSdk 34
+              versionCode 1
+              versionName '1.0'
+            }
+
+            signingConfigs {                   // APK 서명 (저장소의 vocab.keystore 사용)
+              app {
+                storeFile file('../vocab.keystore')
+                storePassword 'vocab1234'
+                keyAlias 'vocab'
+                keyPassword 'vocab1234'
+              }
+            }
+
+            buildTypes {
+              release {
+                signingConfig signingConfigs.app
+                minifyEnabled false
+              }
+            }
+
+            compileOptions {
+              sourceCompatibility JavaVersion.VERSION_17
+              targetCompatibility JavaVersion.VERSION_17
+            }
+            kotlinOptions { jvmTarget = '17' }
+          }
+
+          dependencies {
+            // (3단계에서 추가) implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
+          }
+          EOF
+
+          # 앱 이름 (홈 화면에 보이는 글자)
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <string name="app_name">단어암기</string>
+          </resources>
+          EOF
+
+          # AndroidManifest.xml: 앱의 "신분증". 어떤 화면(Activity)이 있고 어떤 권한이 필요한지
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+            <application
+              android:allowBackup="true"
+              android:icon="@mipmap/ic_launcher"
+              android:label="@string/app_name"
+              android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+              <activity
+                android:name=".MainActivity"
+                android:exported="true"
+                android:launchMode="singleTask">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN" />
+                  <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+              </activity>
+
+            </application>
+          </manifest>
+          EOF
+
+          # MainActivity.kt: 앱이 켜지면 실행되는 코드 (코틀린 언어)
+          #   WebView = 앱 안에 들어있는 작은 크롬. 여기에 index.html 을 띄운다.
+          cat > app/src/main/java/kr/hy/vocab/MainActivity.kt <<'EOF'
+          package kr.hy.vocab
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+
+          class MainActivity : Activity() {
+            private lateinit var web: WebView
+
+            override fun onCreate(saved: Bundle?) {
+              super.onCreate(saved)
+              web = WebView(this)
+              setContentView(web)                       // 화면 전체 = WebView
+
+              web.settings.javaScriptEnabled = true     // 우리 앱은 자바스크립트로 돌아가니 켜기
+              web.settings.domStorageEnabled = true     // localStorage(단어 저장) 켜기
+              web.settings.allowFileAccess = true
+              web.webViewClient = WebViewClient()       // 링크를 외부 브라우저로 안 보내고 안에서 열기
+
+              web.loadUrl("file:///android_asset/index.html")   // 앱 안에 복사해 둔 index.html 열기
+            }
+
+            // 뒤로가기 버튼: 웹 페이지 안에서 뒤로 갈 수 있으면 그렇게, 아니면 앱 종료
+            override fun onBackPressed() {
+              if (web.canGoBack()) web.goBack() else super.onBackPressed()
+            }
+          }
+          EOF
+
+      # ── 3) APK 굽기 ─────────────────────────────────────────
+      - name: Build
+        run: |
+          set -e
+          if ! command -v gradle >/dev/null 2>&1; then
+            curl -sL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o gradle.zip
+            unzip -q gradle.zip
+            export PATH="$PWD/gradle-8.9/bin:$PATH"
+          fi
+          gradle wrapper --gradle-version 8.9
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      # ── 4) Release 에 올리기 ─────────────────────────────────
+      - name: Publish APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          cp app/build/outputs/apk/release/app-release.apk vocab.apk
+          gh release create "apk-${{ github.run_number }}" vocab.apk \
+            --title "단어암기 앱 v${{ github.run_number }}" \
+            --notes "휴대폰에서 vocab.apk 를 눌러 설치하세요."
