@@ -166,6 +166,7 @@ jobs:
           import android.os.Bundle
           import android.webkit.JavascriptInterface
           import android.webkit.WebView
+          import android.webkit.WebChromeClient
           import android.webkit.WebViewClient
           import com.google.mlkit.vision.common.InputImage
           import com.google.mlkit.vision.text.TextRecognition
@@ -198,6 +199,7 @@ jobs:
               web.settings.domStorageEnabled = true
               web.settings.allowFileAccess = true
               web.webViewClient = WebViewClient()
+              web.webChromeClient = WebChromeClient()   // ★ 이게 없으면 웹의 '확인할까요?' 창(alert/confirm/prompt)이 아예 안 뜬다
               web.addJavascriptInterface(Bridge(), "AndroidBridge")
               web.loadUrl("file:///android_asset/index.html")
             }
