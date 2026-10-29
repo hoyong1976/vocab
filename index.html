@@ -49,25 +49,41 @@ textarea{height:160px;font-size:14px}
     <p class="hint" id="installHint"></p>
     <button id="installBtn" class="hide" onclick="doInstall()">홈 화면에 설치하기</button>
   </div>
+  <!-- 직접 입력 -->
   <div class="card">
-    <h2>1. 단어장 등록</h2>
-    <p class="hint">사진을 <b>여러 장 한꺼번에</b> 골라도 돼요 (갤러리에서 길게 눌러 여러 장 선택).</p>
-    <input type="file" id="photo" accept="image/*" multiple>
-    <button class="sub" onclick="document.getElementById('camera').click()">📷 카메라로 한 장씩 찍어 추가</button>
-    <input type="file" id="camera" accept="image/*" capture="environment" class="hide">
-    <div class="bar" style="margin-top:10px"><i id="ocrBar" style="width:0"></i></div>
-    <div id="ocrStatus" class="hint"></div>
-    <p class="hint">인식된 글자가 아래에 들어와요. 직접 붙여넣어도 돼요.<br>형식: <b>영어단어 한글뜻</b> (한 줄에 하나)</p>
+    <h2>✏️ 단어 직접 입력</h2>
+    <div class="row">
+      <input id="qiW" placeholder="영어 단어" autocapitalize="off" autocomplete="off" style="flex:1">
+      <input id="qiM" placeholder="한글 뜻" autocomplete="off" style="flex:1.2">
+    </div>
+    <button onclick="quickAdd()">➕ 추가 (뜻 칸에서 Enter)</button>
+    <p class="hint" id="qiLog" style="margin-top:6px"></p>
+    <p class="hint">추가하면 바로 단어장에 들어가요. 틀리면 📘 단어장 보기에서 고치세요.</p>
+  </div>
+
+  <!-- 붙여넣기 / 사진 -->
+  <div class="card">
+    <h2>📋 여러 단어 한꺼번에 넣기</h2>
+    <p class="hint">갤러리에서 사진 열기 → <b>텍스트 추출</b>(삼성) 또는 <b>구글 렌즈</b> → 복사 → 아래 버튼. 폰의 인식 기능이 앱 안의 것보다 훨씬 정확해요.</p>
+    <button onclick="pasteText()">📋 복사한 글 붙여넣기</button>
+    <p class="hint" style="margin-top:10px">또는 아래 칸에 직접 쓰기 — 형식: <b>영어단어 한글뜻</b> (한 줄에 하나)</p>
     <textarea id="raw" placeholder="apple 사과&#10;beautiful 아름다운&#10;..." oninput="previewDirty()"></textarea>
-    <button class="sub" onclick="preview()">🔍 인식 결과 확인하기</button>
-    <!-- 인식 확인 표 -->
+    <button class="sub" onclick="preview()">🔍 단어/뜻 나누기 확인</button>
+    <details style="margin-top:10px"><summary class="hint">📷 앱 안에서 사진 글자 읽기 (정확도 낮음, 실험용)</summary>
+      <input type="file" id="photo" accept="image/*" multiple style="margin-top:8px">
+      <button class="sub" onclick="document.getElementById('camera').click()">📷 카메라로 찍기</button>
+      <input type="file" id="camera" accept="image/*" capture="environment" class="hide">
+      <div class="bar" style="margin-top:10px"><i id="ocrBar" style="width:0"></i></div>
+    </details>
+    <div id="ocrStatus" class="hint"></div>
+    <!-- 확인 표 -->
     <div id="pv" class="hide">
-      <h2 style="margin-top:14px">인식 확인</h2>
+      <h2 style="margin-top:14px">확인</h2>
       <p class="hint" id="pvSum"></p>
       <div id="pvRows"></div>
       <div id="pvBad" class="hint"></div>
-      <button onclick="loadWords(false)">새 단어장으로 등록 (기존 것 지움)</button>
-      <button class="sub" onclick="loadWords(true)">기존 단어장에 추가</button>
+      <button onclick="loadWords(true)">단어장에 추가</button>
+      <button class="sub" onclick="loadWords(false)">새 단어장으로 (기존 것 지움)</button>
     </div>
   </div>
   <div class="card" id="stat"></div>
@@ -194,9 +210,30 @@ async function ocrFiles(files){
 }
 
 /* 글 → 단어/뜻 짝 찾기 */
+function joinSplitEntries(text){
+  // 폰 텍스트 추출은 "radical**" / "[발음]" / "형 1. 급진적인..." 처럼 단어와 뜻을 다른 줄에 내놓음 → 한 줄로 합치기
+  const lines=text.split('\n').map(x=>x.trim()),out=[];
+  const isHead=l=>/^[^A-Za-z]{0,3}[A-Za-z][A-Za-z']*(?:[ -][A-Za-z']+){0,3}\s*\*{0,3}$/.test(l)&&!/[가-힣]/.test(l)&&!/^\d{2}\s/.test(l);
+  const isExample=l=>/^\d{1,2}\s+[A-Za-z]/.test(l)||(/^[A-Za-z]/.test(l)&&(l.match(/[A-Za-z]+/g)||[]).length>=5&&!/[가-힣]/.test(l));
+  const isSkip=l=>!l||/^\[.*\]$/.test(l)||/^\d{3,4}$/.test(l)||/^[^A-Za-z가-힣]*$/.test(l);
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(!isHead(l)){out.push(l);continue;}
+    const head=l.replace(/^[^A-Za-z]+/,'').replace(/\*+$/,'').trim();const means=[];let j=i+1;
+    for(;j<lines.length;j++){
+      const n=lines[j];
+      if(isSkip(n))continue;
+      if(isHead(n)||isExample(n)||/^[•·▪◦\-]\s*[A-Za-z]/.test(n))break;   // 다음 표제어·예문·파생어가 나오면 끝
+      if(/[가-힣]/.test(n)&&means.length<3)means.push(n);else break;
+    }
+    if(means.length){out.push(head+' '+means.join(' / '));i=j-1;}else out.push(l);
+  }
+  return out.join('\n');
+}
 function parseLines(text){
   const ok=[],bad=[];
   const POS='(?:v|vt|vi|n|a|ad|adj|adv|prep|conj|pron|int)';
+  text=joinSplitEntries(text);
   for(let l of text.split('\n')){
     const orig=l.trim();if(!orig)continue;
     if(!/[가-힣]/.test(orig)){bad.push(orig);continue;}                           // 한글이 없는 줄(영어 예문 등)은 단어 줄 아님
@@ -222,7 +259,7 @@ function parseLines(text){
     if((mn.match(/\(/g)||[]).length!==(mn.match(/\)/g)||[]).length)mn=mn.replace(/[()]/g,''); // 짝이 안 맞는 괄호는 전부 제거
     mn=mn.replace(/^[가-힣]\s+(?=\d)/,'')                                           // 앞의 품사 기호 오독(한 글자) 제거
         .replace(/(\s+(?:\d{1,2}\.?|[가-힣]|[.~,;]+))+$/,'')                       // 뒤에 붙은 번호·한 글자 잡음 제거
-        .replace(/\s+\.\s+/g,' ').trim();
+        .replace(/\s+\.\s+/g,' ').replace(/(^|\/ )([명동형부전접대감])\s+(?=[\d(가-힣])/g,'$1[$2] ').trim(); // 품사 한 글자는 [명] 식으로
     const kor=(mn.match(/[가-힣]/g)||[]).length,all=(mn.match(/[가-힣A-Za-z0-9]/g)||[]).length;
     // 뜻이 너무 짧거나(1글자) 한글 비율이 낮으면 잡음
     if(kor<2||kor<all*0.6||mn.length>60||(toks.length>=3&&kor<4)){bad.push(orig);continue;} // 여러 단어인데 뜻이 짧으면 예문 조각
@@ -249,6 +286,32 @@ function preview(){
 function pvCount(){const n=document.querySelectorAll('#pvRows .pvRow').length;document.getElementById('pvSum').textContent=`단어 ${n}개를 찾았어요. 틀린 글자는 칸을 눌러 고치고, 필요 없는 줄은 ✕ 로 지우세요.`;}
 function pvWords(){return[...document.querySelectorAll('#pvRows .pvRow')].map(r=>({w:r.querySelector('.w').value.trim().toLowerCase(),m:r.querySelector('.m').value.trim()})).filter(x=>x.w&&x.m);}
 document.getElementById('photo').onchange=e=>{ocrFiles([...e.target.files]);e.target.value='';};
+/* 직접 입력 */
+function quickAdd(){
+  const wI=document.getElementById('qiW'),mI=document.getElementById('qiM');
+  const w=wI.value.trim().toLowerCase(),m=mI.value.trim();
+  if(!w||!m){ (w?mI:wI).focus();return; }
+  const dup=words.find(x=>x.w===w);
+  if(dup){if(!confirm(`'${w}'는 이미 있어요 (${dup.m}). 뜻을 바꿀까요?`))return;dup.m=m;}
+  else words.push({w,m,lv:0,wrong:0});
+  save();renderStat();wI.value='';mI.value='';wI.focus();
+  document.getElementById('qiLog').textContent=`✅ ${w} — ${m}  (총 ${words.length}개)`;
+}
+document.getElementById('qiW').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('qiM').focus();}});
+document.getElementById('qiM').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();quickAdd();}});
+
+/* 복사한 글 붙여넣기 / 공유로 받은 글 */
+function addText(t){
+  const raw=document.getElementById('raw');if(!t||!t.trim())return;
+  raw.value=(raw.value.trim()?raw.value.trim()+'\n':'')+t.trim()+'\n';
+  document.getElementById('ocrStatus').textContent='글을 받았어요. 아래에서 단어·뜻이 맞게 나뉘었는지 확인하세요.';preview();
+}
+async function pasteText(){
+  try{const t=await navigator.clipboard.readText();if(!t.trim())return alert('복사된 글이 없어요. 먼저 텍스트 추출에서 복사하세요.');addText(t);}
+  catch(e){alert('붙여넣기 권한이 없어요. 아래 글 칸을 길게 눌러 직접 붙여넣어 주세요.');document.getElementById('raw').focus();}
+}
+(function(){const q=new URLSearchParams(location.search);const t=(q.get('text')||'')+'\n'+(q.get('title')||'');
+  if(t.trim()){addText(t);history.replaceState(null,'',location.pathname);}})();
 document.getElementById('camera').onchange=e=>{ocrFiles([...e.target.files]);e.target.value='';};
 
 /* 단어장 등록 — 인식 확인 표에 있는(고친) 내용을 그대로 등록 */
