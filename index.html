@@ -95,7 +95,7 @@ textarea{height:160px;font-size:14px}
       <input type="file" id="camera" accept="image/*" capture="environment" class="hide">
     </div>
     <div id="androidBox" class="hide">
-      <button onclick="AndroidBridge.pickImage()">🖼 갤러리에서 사진 고르기 (앱)</button>
+      <button onclick="AndroidBridge.pickImage()">🖼 갤러리에서 사진 골라 읽기 (여러 장 가능)</button>
       <div id="androidPreview" class="hint" style="margin-top:8px"></div>
     </div>
     <div class="bar" style="margin-top:10px"><i id="ocrBar" style="width:0"></i></div>
@@ -581,12 +581,15 @@ let installEvt=null;
 /* ---------- 안드로이드 앱(APK) 안에서 실행 중인지 ---------- */
 const ANDROID=!!window.AndroidBridge;              // MainActivity.kt 가 addJavascriptInterface 로 넣어준 객체가 있으면 앱
 if(ANDROID){document.getElementById('webPhotoBox').classList.add('hide');document.getElementById('androidBox').classList.remove('hide');}
-/* 안드로이드가 사진을 골라서 돌려줄 때 부르는 함수 (2단계: 사진 받기만 확인) */
-function onImagePicked(dataUrl,w,h){
-  const box=document.getElementById('androidPreview');
-  box.innerHTML=`✅ 사진을 받았어요 (${w}×${h})<br><img src="${dataUrl}" style="max-width:100%;border-radius:10px;margin-top:6px">`;
-  document.getElementById('ocrStatus').textContent='2단계 확인 완료 — 3단계에서 이 사진의 글자를 읽게 됩니다.';
+/* 안드로이드(ML Kit)가 사진 글자를 읽어 돌려줄 때 부르는 함수들 (3단계) */
+function onOcrStart(n){document.getElementById('ocrStatus').textContent=`사진 ${n}장 읽는 중... (앱 안의 구글 글자 인식)`;document.getElementById('androidPreview').textContent='';}
+function onOcrText(text,i,n){
+  const raw=document.getElementById('raw');
+  if(text&&text.trim())raw.value=(raw.value.trim()?raw.value.trim()+'\n':'')+text.trim()+'\n';
+  document.getElementById('ocrStatus').textContent=`사진 ${i} / ${n} 읽음`;
 }
+function onOcrDone(){document.getElementById('ocrStatus').textContent='읽기 완료! 아래에서 단어·뜻이 맞게 나뉘었는지 확인하세요.';preview();}
+function onImagePicked(){}  // (2단계용, 이제 안 씀)
 function onAndroidError(msg){document.getElementById('androidPreview').textContent='⚠️ '+msg;}
 const isStandalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true||ANDROID||/; wv\)/.test(navigator.userAgent);
 const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
