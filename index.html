@@ -54,7 +54,6 @@ textarea{height:160px;font-size:14px}
   <!-- 회차 목록 -->
   <div class="card">
     <h2>📚 회차별 단어장</h2>
-    <p class="hint">☑ 체크한 회차를 <b>합쳐서</b> 학습·검증해요. <b>[추가 중]</b>인 회차에 새 단어가 들어가요.</p>
     <div id="setList"></div>
     <div class="row" style="align-items:center;margin-top:8px">
       <input id="rngA" type="number" min="1" placeholder="3" style="flex:1;font-size:16px;padding:10px"><span>~</span>
@@ -77,15 +76,13 @@ textarea{height:160px;font-size:14px}
       <input id="qiM" placeholder="한글 뜻" autocomplete="off" style="flex:1.2">
     </div>
     <button onclick="quickAdd()">➕ 추가 (뜻 칸에서 Enter)</button>
-    <p class="hint" id="qiLog" style="margin-top:6px"></p>
-    <p class="hint">추가하면 바로 단어장에 들어가요. 틀리면 📘 단어장 보기에서 고치세요.</p>
+    <p class="hint hide" id="qiLog"></p>
   </div>
 
   <!-- 붙여넣기 / 사진 -->
   <div class="card">
     <textarea id="raw" class="hide" oninput="previewDirty()"></textarea>
     <h2>📷 사진으로 읽기 <span class="hint" id="pvTarget"></span></h2>
-    <p class="hint">갤러리에서 사진 고르기(여러 장 가능) 또는 카메라로 바로 찍기. 한 쪽씩, 정면에서, 밝게 찍을수록 잘 읽어요. 두 쪽이 한 장에 있으면 자동으로 나눠 읽습니다.</p>
     <!-- 웹 버전: 파일 선택창 / 안드로이드 앱: 아래 androidBox 가 대신 보임 -->
     <div id="webPhotoBox">
       <input type="file" id="photo" accept="image/*" multiple>
@@ -108,7 +105,6 @@ textarea{height:160px;font-size:14px}
       <button class="sub" onclick="loadWords(false)">☑ 체크한 단어로 이 회차를 새로 채우기 (기존 단어 삭제)</button>
     </div>
   </div>
-  <div class="card" id="stat"></div>
   <div class="card">
     <button class="sub" onclick="openBook()">📘 단어장 보기 / 고치기</button>
     <button onclick="startStudy()">📖 학습하기 (외우기)</button>
@@ -378,7 +374,7 @@ function preview(){
 }
 function pvCheckAll(on){document.querySelectorAll('#pvRows input[type=checkbox]').forEach(c=>{c.checked=on;c.parentNode.classList.toggle('sub',!on);});pvCount();}
 function pvCount(){const n=document.querySelectorAll('#pvRows input[type=checkbox]:checked').length,t=document.querySelectorAll('#pvRows .pvRow').length;
-  document.getElementById('pvSum').textContent=`단어 ${t}개 중 ${n}개 체크됨. 메인 단어는 체크, 파생어·숙어는 해제 상태로 시작해요. 칸을 눌러 글자를 고칠 수 있어요.`;}
+  document.getElementById('pvSum').textContent=`단어 ${t}개 중 ${n}개 체크됨`;}
 function pvWords(){return[...document.querySelectorAll('#pvRows .pvRow')].filter(r=>r.querySelector('input[type=checkbox]').checked).map(r=>({w:r.querySelector('.w').value.trim().toLowerCase(),m:r.querySelector('.m').value.trim()})).filter(x=>x.w&&x.m);}
 document.getElementById('photo').onchange=e=>{ocrFiles([...e.target.files]);e.target.value='';};
 /* 직접 입력 */
@@ -457,11 +453,8 @@ function clearWords(){
   alert('단어장을 비웠어요.');
 }
 function delWord(sid,i){const arr=sets.find(s=>s.id===sid).words;if(confirm(`'${arr[i].w}' 를 지울까요?`)){arr.splice(i,1);save();renderBook();}}
-function renderStat(){
-  const done=words.filter(w=>w.lv>=5).length;
-  document.getElementById('stat').innerHTML=words.length?`<h2>진행 상황</h2><div class="bar"><i style="width:${done/words.length*100}%"></i></div>
-  <p class="hint">선택 회차: ${selSets().map(x=>x.name).join(', ')||'없음'}<br>총 ${words.length}개 · 완료 ${done}개 · 오답누적 ${words.filter(w=>w.wrong>0).length}개</p>`:'<p class="hint">등록된 단어장이 없어요.</p>';
-}
+function renderStat(){}  // 진행 상황 카드 삭제됨
+
 
 /* 암기 힌트 자동 생성 */
 function makeHint(w){
