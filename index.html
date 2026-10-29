@@ -69,12 +69,12 @@ textarea{height:160px;font-size:14px}
     <p class="hint" style="margin-top:10px">또는 아래 칸에 직접 쓰기 — 형식: <b>영어단어 한글뜻</b> (한 줄에 하나)</p>
     <textarea id="raw" placeholder="apple 사과&#10;beautiful 아름다운&#10;..." oninput="previewDirty()"></textarea>
     <button class="sub" onclick="preview()">🔍 단어/뜻 나누기 확인</button>
-    <details style="margin-top:10px"><summary class="hint">📷 앱 안에서 사진 글자 읽기 (정확도 낮음, 실험용)</summary>
-      <input type="file" id="photo" accept="image/*" multiple style="margin-top:8px">
-      <button class="sub" onclick="document.getElementById('camera').click()">📷 카메라로 찍기</button>
-      <input type="file" id="camera" accept="image/*" capture="environment" class="hide">
-      <div class="bar" style="margin-top:10px"><i id="ocrBar" style="width:0"></i></div>
-    </details>
+    <h2 style="margin-top:16px">📷 사진으로 읽기</h2>
+    <p class="hint">갤러리에서 사진 고르기(여러 장 가능) 또는 카메라로 바로 찍기. 한 쪽씩, 정면에서, 밝게 찍을수록 잘 읽어요. 두 쪽이 한 장에 있으면 자동으로 나눠 읽습니다.</p>
+    <input type="file" id="photo" accept="image/*" multiple>
+    <button class="sub" onclick="document.getElementById('camera').click()">📷 카메라로 찍어서 인식</button>
+    <input type="file" id="camera" accept="image/*" capture="environment" class="hide">
+    <div class="bar" style="margin-top:10px"><i id="ocrBar" style="width:0"></i></div>
     <div id="ocrStatus" class="hint"></div>
     <!-- 확인 표 -->
     <div id="pv" class="hide">
@@ -93,7 +93,12 @@ textarea{height:160px;font-size:14px}
     <button onclick="startStudy()">📖 학습하기 (외우기)</button>
     <button onclick="startQuiz()">✍️ 단계별 검증</button>
     <button onclick="startQuiz(true)" class="sub">❌ 오답만 다시</button>
-    <button onclick="if(confirm('초기화할까요?')){localStorage.clear();location.reload()}" class="sub">초기화</button>
+  </div>
+  <div class="card">
+    <h2>🗑 초기화</h2>
+    <button class="sub" onclick="resetProgress()">🔄 학습 진도만 초기화 (단어는 유지)</button>
+    <button class="sub" onclick="clearWords()" style="background:#fee2e2;color:#b91c1c">🗑 단어장 비우기 (단어 전부 삭제)</button>
+    <button class="sub" onclick="if(confirm('앱의 모든 저장 내용(단어장·설정)을 지우고 처음 상태로 되돌릴까요?')){localStorage.clear();location.reload()}">⚠️ 전체 초기화</button>
   </div>
 </div>
 
@@ -104,6 +109,7 @@ textarea{height:160px;font-size:14px}
     <input id="bookSearch" placeholder="검색 (영어·한글)" oninput="renderBook()" style="font-size:15px">
     <p class="hint">단어나 뜻을 누르면 고칠 수 있어요. ⭐ 0~5는 통과한 단계.</p>
     <div id="bookList"></div>
+    <div class="row"><button class="sub" onclick="resetProgress()">🔄 진도 초기화</button><button class="sub" onclick="clearWords()" style="background:#fee2e2;color:#b91c1c">🗑 전부 삭제</button></div>
     <button class="sub" onclick="go('home')">홈으로</button>
   </div>
 </div>
@@ -375,6 +381,18 @@ function editWord(i,f){
   const v=prompt(f==='w'?'영어 단어 고치기':'뜻 고치기',words[i][f]);if(v===null)return;
   const t=f==='w'?v.trim().toLowerCase():v.trim();if(!t)return;
   words[i][f]=t;save();renderBook();
+}
+function resetProgress(){
+  if(!words.length)return alert('단어장이 비어 있어요.');
+  if(!confirm(`단어 ${words.length}개의 학습 진도(통과 단계·오답 횟수)를 모두 0으로 되돌릴까요? 단어는 그대로 남아요.`))return;
+  words.forEach(w=>{w.lv=0;w.wrong=0;});save();renderStat();if(!document.getElementById('book').classList.contains('hide'))renderBook();
+  alert('진도를 초기화했어요. 처음부터 다시 외울 수 있어요.');
+}
+function clearWords(){
+  if(!words.length)return alert('단어장이 이미 비어 있어요.');
+  if(!confirm(`단어 ${words.length}개를 모두 삭제할까요? 되돌릴 수 없어요.`))return;
+  words=[];save();renderStat();if(!document.getElementById('book').classList.contains('hide'))renderBook();
+  alert('단어장을 비웠어요.');
 }
 function delWord(i){if(confirm(`'${words[i].w}' 를 지울까요?`)){words.splice(i,1);save();renderBook();}}
 function renderStat(){
