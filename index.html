@@ -230,7 +230,15 @@ function joinSplitEntries(text){
       if(isHead(n)||isExample(n)||/^[•·▪◦\-]\s*[A-Za-z]/.test(n))break;   // 다음 표제어·예문·파생어가 나오면 끝
       if(/[가-힣]/.test(n)&&means.length<3)means.push(n);else break;
     }
-    if(means.length){out.push(head+' '+means.join(' / '));i=j-1;}else out.push(l);
+    // 뜻 다음에 "01 예문…"처럼 번호 붙은 예문이 따라오면 메인 단어 (파생어에는 예문이 없음)
+    let hasEx=false;for(let q=j;q<lines.length&&q<j+8;q++){const n=lines[q];if(isSkip(n))continue;if(isHead(n)||/^[•·▪◦\-]\s*[A-Za-z]/.test(n))break;if(/^\d{2}\s+[A-Za-z]/.test(n)){hasEx=true;break;}}
+    const mark=(coded||hasEx)?'§':bullet?'‡':'';
+    if(means.length){out.push(mark+head.replace(/^[§‡]/,'')+' '+means.join(' / '));i=j-1;}else out.push(l);
+  }
+  // 단어와 뜻이 같은 줄에 있는 책도 같은 규칙 적용: 다음 줄들이 번호 예문이면 메인
+  for(let i=0;i<out.length;i++){
+    const l=out[i];if(/^[§‡]/.test(l)||!/^[^A-Za-z]{0,3}[A-Za-z]/.test(l)||!/[가-힣]/.test(l))continue;
+    for(let q=i+1;q<out.length&&q<i+8;q++){const n=out[q];if(isSkip(n))continue;if(/^\d{2}\s+[A-Za-z]/.test(n)){out[i]='§'+l;}break;}
   }
   return out.join('\n');
 }
