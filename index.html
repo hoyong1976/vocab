@@ -219,8 +219,13 @@ function delSet(id){
 }
 function showScreen(id){['home','book','study','quiz'].forEach(x=>document.getElementById(x).classList.toggle('hide',x!==id));if(id==='home'){renderStat();renderSets();}}
 function go(id){history.pushState({s:id},'');showScreen(id);}   // 화면을 바꿀 때마다 기록을 남겨서 ← 가 바로 직전 화면으로 돌아가게
+function mark(extra){history.pushState(Object.assign({s:history.state?history.state.s:'home'},extra),'');}  // 같은 화면 안에서 단어가 바뀔 때도 기록
 history.replaceState({s:'home'},'');
-window.addEventListener('popstate',e=>showScreen((e.state&&e.state.s)||'home'));   // ← 누르면 이전 화면
+window.addEventListener('popstate',e=>{                      // ← 누르면 기록대로 화면·단어 복원
+  const st=e.state||{s:'home'};showScreen(st.s);
+  if(st.s==='study'&&st.i!==undefined){sI=st.i;showStudy(false);}
+  if(st.s==='quiz'&&st.q!==undefined){const r=hist[st.q];if(!r){showScreen('home');return;}renderQ(r,st.q);}
+});
 const speak=t=>{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=0.9;speechSynthesis.speak(u);};  // 버튼을 눌렀을 때만 호출
 const shuffle=a=>a.sort(()=>Math.random()-.5);
 
@@ -472,8 +477,8 @@ function makeHint(w){
 }
 
 /* 학습 모드 */
-function startStudy(){if(!words.length)return alert('체크한 Day에 단어가 없어요. Day를 선택하거나 단어를 넣어주세요.');sI=0;go('study');showStudy();}
-function showStudy(){cur=words[sI];document.getElementById('sIdx').textContent=(sI+1)+' / '+words.length;
+function startStudy(){if(!words.length)return alert('체크한 Day에 단어가 없어요. Day를 선택하거나 단어를 넣어주세요.');sI=0;go('study');showStudy(false);}
+function showStudy(rec=true){if(rec)mark({i:sI});else history.replaceState({s:'study',i:sI},'');cur=words[sI];document.getElementById('sIdx').textContent=(sI+1)+' / '+words.length;
   document.getElementById('sWord').textContent=cur.w;document.getElementById('sMean').textContent=cur.m;
   document.getElementById('sHint').innerHTML=makeHint(cur.w);}
 function sMove(d){sI=(sI+d+words.length)%words.length;showStudy();}
@@ -483,41 +488,66 @@ function startQuiz(wrong=false){
   if(!words.length)return alert('체크한 Day에 단어가 없어요. Day를 선택하거나 단어를 넣어주세요.');onlyWrong=wrong;
   let pool=words.filter(w=>w.lv<5&&(!wrong||w.wrong>0));
   if(!pool.length){go('home');document.getElementById('qiLog').textContent=wrong?'❌ 오답이 없어요!':'🎉 선택한 Day의 모든 단어를 완벽히 외웠어요!';return;}
-  const minLv=Math.min(...pool.map(w=>w.lv));queue=shuffle(pool.filter(w=>w.lv===minLv));qI=0;go('quiz');ask();
+  const minLv=Math.min(...pool.map(w=>w.lv));queue=shuffle(pool.filter(w=>w.lv===minLv));qI=0;if(!document.getElementById('quiz').classList.contains('hide')){ask(true);return;}hist=[];go('quiz');ask(false);
 }
-function ask(){
+/* 문제마다 기록: {w, m, st(단계), opts(보기), show(힌트), ans(마지막 답), ok, tries(틀린 횟수), done(점수 반영됨)} */
+let hist=[], viewHi=-1;
+function ask(rec=true){
   if(qI>=queue.length){return startQuiz(onlyWrong);}
   cur=queue[qI];const st=cur.lv+1;
-  document.getElementById('qStage').textContent=st+'단계 · '+STAGE[st];
-  document.getElementById('qCount').textContent=(qI+1)+'/'+queue.length;
-  document.getElementById('qBar').style.width=(cur.lv/5*100)+'%';
-  document.getElementById('qMean').textContent=cur.m;document.getElementById('qFb').textContent='';
-  const show=document.getElementById('qShow'),opts=document.getElementById('qOpts'),ib=document.getElementById('qInputBox'),inp=document.getElementById('qIn');
-  opts.innerHTML='';show.textContent='';inp.value='';
-  if(st===1){                                   // 4지선다: 같은 회차(선택한 회차)의 다른 단어들이 오답 보기
-    ib.classList.add('hide');
+  const r={w:cur.w,m:cur.m,st,opts:null,show:'',ans:null,ok:null,tries:0,done:false,no:qI+1,total:queue.length,ref:cur,lvBefore:cur.lv,wrongBefore:cur.wrong};
+  if(st===1){
     let others=words.filter(x=>x!==cur&&x.w!==cur.w);
-    if(others.length<3)sets.forEach(s=>s.words.forEach(x=>{if(x.w!==cur.w&&!others.includes(x))others.push(x);})); // 모자라면 다른 회차에서
-    const c=shuffle([cur,...shuffle(others).slice(0,3)]);
-    c.forEach(x=>{const b=document.createElement('button');b.className='opt';b.textContent=x.w;b.onclick=()=>{if(!judging){judging=true;[...opts.children].forEach(o=>o.disabled=true);judge(x.w===cur.w);}};opts.appendChild(b);});
-  }else{
-    ib.classList.remove('hide');
-    if(st===2){const a=cur.w.split('');for(let i=1;i<a.length-1;i++)if(Math.random()<.5)a[i]='_';show.textContent=a.join('');}
-    if(st===3)show.textContent=cur.w[0]+'_'.repeat(cur.w.length-1);
-    inp.focus();
-  }
+    if(others.length<3)sets.forEach(s=>s.words.forEach(x=>{if(x.w!==cur.w&&!others.includes(x))others.push(x);}));
+    r.opts=shuffle([cur,...shuffle(others).slice(0,3)]).map(x=>x.w);
+  }else if(st===2){const a=cur.w.split('');for(let i=1;i<a.length-1;i++)if(Math.random()<.5)a[i]='_';r.show=a.join('');}
+  else if(st===3)r.show=cur.w[0]+'_'.repeat(cur.w.length-1);
+  hist.push(r);
+  if(rec)mark({q:hist.length-1});else history.replaceState({s:'quiz',q:hist.length-1},'');
+  renderQ(r,hist.length-1);
 }
-let judging=false;
+/* 문제 화면 그리기 — 처음 풀 때·되돌아왔을 때 공통. 답은 언제든 고칠 수 있고, '다음'을 눌러야 넘어감 */
+function renderQ(r,hi){
+  viewHi=hi;
+  document.getElementById('qStage').textContent=r.st+'단계 · '+STAGE[r.st];
+  document.getElementById('qCount').textContent=r.no+'/'+r.total;
+  document.getElementById('qBar').style.width=(r.lvBefore/5*100)+'%';
+  document.getElementById('qMean').textContent=r.m;
+  const fb=document.getElementById('qFb'),show=document.getElementById('qShow'),opts=document.getElementById('qOpts'),ib=document.getElementById('qInputBox'),inp=document.getElementById('qIn');
+  opts.innerHTML='';show.textContent=r.show;inp.value=r.ans||'';
+  fb.innerHTML=r.ans===null?'':r.ok?'<span style="color:#16a34a">⭕ 정답!</span>':`<span style="color:#dc2626">❌ 틀렸어요. 다시 골라보세요</span>`;
+  if(r.st===1){
+    ib.classList.add('hide');
+    r.opts.forEach(w=>{
+      const b=document.createElement('button');b.className='opt';b.textContent=w;
+      if(w===r.ans)b.style.background=r.ok?'#bbf7d0':'#fecaca';      // 내가 고른 보기 색칠 (맞음=초록, 틀림=빨강)
+      b.onclick=()=>answer(hi,w);
+      opts.appendChild(b);
+    });
+  }else{ib.classList.remove('hide');if(r.ans===null)inp.focus();}
+  let nb=document.getElementById('qNext');
+  if(!nb){nb=document.createElement('button');nb.id='qNext';nb.textContent='다음 ▶';fb.parentNode.insertBefore(nb,fb.nextSibling);}
+  nb.classList.toggle('hide',!r.ok);                                 // 맞혀야 '다음' 버튼이 보임
+  nb.onclick=()=>next(hi);
+}
 document.getElementById('qIn').addEventListener('keydown',e=>{if(e.key==='Enter')submitType();});
-function submitType(){judge(document.getElementById('qIn').value.trim().toLowerCase()===cur.w);}
-
-function judge(ok){
-  const fb=document.getElementById('qFb');
-  if(ok){cur.lv++;fb.innerHTML='<span style="color:#16a34a">⭕ 정답!</span>';}
-  else{cur.wrong++;cur.lv=Math.max(0,cur.lv-1);fb.innerHTML=`<span style="color:#dc2626">❌ 정답: <b>${cur.w}</b></span>`;}
-  save();qI++;setTimeout(()=>{judging=false;ask();},ok?700:1800);
+function submitType(){const r=hist[viewHi];if(!r)return;answer(viewHi,document.getElementById('qIn').value.trim().toLowerCase());}
+/* 답하기: 몇 번이든 고칠 수 있음. 틀리면 tries 올리고 그 자리에 머묾 */
+function answer(hi,ans){
+  const r=hist[hi];if(!ans)return;
+  r.ans=ans;r.ok=ans===r.w;if(!r.ok)r.tries++;
+  renderQ(r,hi);
 }
-
+/* 다음: 이 문제의 최종 결과를 점수에 반영 (처음에 맞힘 → 레벨 +1, 틀렸다 맞힘 → 오답 +1, 레벨 유지) */
+function next(hi){
+  const r=hist[hi],t=r.ref;
+  if(!r.ok)return;
+  t.lv=r.lvBefore;t.wrong=r.wrongBefore;                             // 되돌아가 고친 경우를 위해 먼저 원상복구
+  if(r.tries===0)t.lv++;else t.wrong++;
+  r.done=true;save();
+  if(hi===hist.length-1){qI++;ask();}                                // 마지막(지금 풀던) 문제면 다음 문제 출제
+  else{history.go(hist.length-1-hi);}                                // 되돌아가 고친 거면 풀던 문제로 복귀
+}
 /* PWA 설치 안내 */
 let installEvt=null;
 /* ---------- 안드로이드 앱(APK) 안에서 실행 중인지 ---------- */
